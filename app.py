@@ -11,7 +11,7 @@ from flask import Flask, jsonify, redirect, render_template, request, session, a
 import store
 import seatalk_login
 from domain import summarize,overall
-from schedules import parse_starts,shift_totals
+from schedules import parse_starts,shift_totals,hour_calendar
 
 
 def create_app():
@@ -176,7 +176,7 @@ def create_app():
             abort(400)
         definition=store.unit_schedule(soc) if soc else None
         error=None
-        values=[f'{h:02d}:00' for h in definition['starts']] if definition and definition['configured'] else ['07:00','','']
+        values=[f'{h:02d}:00' for h in definition['starts']] if definition and definition['configured'] else [f"{definition['starts'][0]:02d}:00" if definition else '06:00','','']
         if request.method=='POST':
             csrf()
             if not soc:
@@ -226,6 +226,9 @@ def create_app():
             selected_rows=[r for r in rows if r['hour'] in selected['hours']] if selected else rows
             result=summarize(selected_rows,[soc],day,soc,flow,hour,reason)
             result['daily_series']=summarize(rows,[soc],day,soc,flow,reason=reason)['series']
+            for series in (result['series'],result['daily_series']):
+                for item in series:
+                    item.update(hour_calendar(day,item['hour'],definition['starts'][0]))
             result['schedule']=definition
             result['shift']=shift_id
             result['shift_totals']=shift_totals(rows,soc,definition,flow,reason)

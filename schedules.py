@@ -1,5 +1,25 @@
-"""Turnos por SOC. A ordem muda; cutoff e horas da fonte são preservados."""
+"""Turnos e calendário operacional; cutoff bruto da fonte tem corte às 06h."""
 import re
+from datetime import date,timedelta
+
+SOURCE_DAY_START=6
+JACAREPAGUA='soc_rj_jacarepagua'
+
+
+def default_schedule(soc):
+    start=7 if soc.strip().casefold()==JACAREPAGUA else 6
+    return schedule([start,(start+8)%24,(start+16)%24])
+
+
+def source_day_for_hour(day,hour,start):
+    """Cutoff a consultar para a hora do ciclo D0/D+1 da unidade."""
+    return (date.fromisoformat(day)+timedelta(days=int(hour<start)-int(hour<SOURCE_DAY_START))).isoformat()
+
+
+def hour_calendar(day,hour,start):
+    offset=int(hour<start)
+    return dict(date=(date.fromisoformat(day)+timedelta(days=offset)).isoformat(),
+                day_offset=offset,day_label='D+1' if offset else 'D0')
 
 
 def parse_starts(values):
@@ -23,7 +43,7 @@ def validate_starts(starts):
 
 
 def schedule(starts=None,configured=False,version=0,updated_by=None,updated_at=None):
-    starts=starts or [7,15,23]
+    starts=starts or [6,14,22]
     validate_starts(starts)
     order=[(starts[0]+i)%24 for i in range(24)]
     shifts=[]

@@ -4,7 +4,7 @@ import psycopg
 from psycopg.rows import dict_row
 from domain import DIMS, fingerprint
 from psycopg.types.json import Jsonb
-from schedules import schedule,validate_starts
+from schedules import schedule,validate_starts,default_schedule,SOURCE_DAY_START
 
 
 def connection():
@@ -43,7 +43,9 @@ def catalog():
     with connection() as conn:
         stations = [r['soc_name'] for r in conn.execute('''SELECT DISTINCT f.soc_name FROM eha_latest l
             JOIN eha_facts f ON f.revision_id=l.revision_id ORDER BY 1''')]
-        days = [r['day'].isoformat() for r in conn.execute('SELECT DISTINCT day FROM eha_latest ORDER BY 1 DESC')]
+        days = [r['day'].isoformat() for r in conn.execute(f'''SELECT day FROM eha_latest UNION
+            SELECT {_unit_day_sql()} AS day FROM eha_latest l
+            LEFT JOIN eha_unit_settings u ON u.soc_name=l.soc_name ORDER BY 1 DESC''')]
         flows = [r['fluxo'] for r in conn.execute('''SELECT DISTINCT f.fluxo FROM eha_latest l
             JOIN eha_facts f ON f.revision_id=l.revision_id WHERE f.fluxo<>'' ORDER BY 1''')]
     return dict(stations=stations,days=days,flows=flows)
@@ -51,8 +53,17 @@ def catalog():
 
 def read_day(day,soc):
     with connection() as conn:
-        return conn.execute('''SELECT l.hour,f.* FROM eha_latest l JOIN eha_facts f
-            ON f.revision_id=l.revision_id WHERE l.day=%s AND l.soc_name=%s ORDER BY l.hour''', (day,soc)).fetchall()
+        return conn.execute(f'''SELECT l.hour,f.* FROM eha_latest l JOIN eha_facts f
+            ON f.revision_id=l.revision_id LEFT JOIN eha_unit_settings u ON u.soc_name=l.soc_name
+            WHERE l.day BETWEEN %s::date-1 AND %s::date+1 AND l.soc_name=%s
+            AND {_unit_day_sql()}=%s::date ORDER BY l.hour''', (day,day,soc,day)).fetchall()
+
+
+def _unit_day_sql():
+    # A fonte já atribui 00h–05h ao cutoff anterior. Reconstruir o dia civil
+    # antes de aplicar T1 evita deslocar a madrugada duas vezes.
+    start="COALESCE((u.shift_starts->>0)::integer,CASE WHEN lower(l.soc_name)='soc_rj_jacarepagua' THEN 7 ELSE 6 END)"
+    return f'(l.day + (l.hour<{SOURCE_DAY_START})::integer - (l.hour<{start})::integer)'
 
 
 def read_overall(day):
@@ -64,9 +75,14 @@ def read_overall(day):
 
 def coverage(day,soc=''):
     with connection() as conn:
-        rows=conn.execute('''SELECT hour,max(last_seen_at) AS last_seen,count(*) AS stations
-            FROM eha_latest WHERE day=%s AND (%s='' OR soc_name=%s)
-            GROUP BY hour ORDER BY hour''',(day,soc,soc)).fetchall()
+        if soc:
+            rows=conn.execute(f'''SELECT l.hour,max(l.last_seen_at) AS last_seen,count(*) AS stations
+                FROM eha_latest l LEFT JOIN eha_unit_settings u ON u.soc_name=l.soc_name
+                WHERE l.day BETWEEN %s::date-1 AND %s::date+1 AND l.soc_name=%s
+                AND {_unit_day_sql()}=%s::date GROUP BY l.hour ORDER BY l.hour''',(day,day,soc,day)).fetchall()
+        else:
+            rows=conn.execute('''SELECT hour,max(last_seen_at) AS last_seen,count(*) AS stations
+                FROM eha_latest WHERE day=%s GROUP BY hour ORDER BY hour''',(day,)).fetchall()
     return [dict(hour=r['hour'],last_seen=r['last_seen'].isoformat(),stations=r['stations']) for r in rows]
 
 
@@ -91,7 +107,7 @@ def unit_schedule(soc):
     with connection() as conn:
         row=conn.execute('SELECT * FROM eha_unit_settings WHERE soc_name=%s',(soc,)).fetchone()
     if not row:
-        return schedule()
+        return default_schedule(soc)
     return schedule(row['shift_starts'],True,row['version'],row['updated_by'],row['updated_at'].isoformat())
 
 

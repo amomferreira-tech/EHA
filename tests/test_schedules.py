@@ -1,8 +1,32 @@
 import unittest
-from schedules import parse_starts,schedule,shift_totals
+from schedules import parse_starts,schedule,shift_totals,default_schedule,source_day_for_hour,hour_calendar
 
 
 class ScheduleTests(unittest.TestCase):
+    def test_defaults_and_saved_override(self):
+        for soc,start in [('SoC_RJ_Jacarepagua',7),('SoC_RJ_Duque de Caxias',6),('SOC A',6)]:
+            result=default_schedule(soc)
+            self.assertEqual(result['hour_order'][0],start)
+            self.assertEqual(result['hour_order'][-1],start-1)
+        self.assertEqual(schedule([8,16,0],True)['hour_order'][0],8)
+
+    def test_jacarepagua_six_am_comes_from_following_cutoff(self):
+        day='2026-11-16'
+        self.assertEqual(source_day_for_hour(day,7,7),day)
+        self.assertEqual(source_day_for_hour(day,6,7),'2026-11-17')
+        # 00h–05h already belong to the previous cutoff in the source.
+        self.assertEqual(source_day_for_hour(day,0,7),day)
+        self.assertEqual(source_day_for_hour(day,5,7),day)
+        self.assertEqual(hour_calendar(day,6,7)['date'],'2026-11-17')
+        self.assertEqual(hour_calendar(day,7,7)['day_label'],'D0')
+
+    def test_standard_cycle_and_custom_boundary(self):
+        for h in range(24):
+            self.assertEqual(source_day_for_hour('2026-12-31',h,6),'2026-12-31')
+        self.assertEqual(hour_calendar('2026-12-31',5,6)['date'],'2027-01-01')
+        self.assertEqual(source_day_for_hour('2026-01-01',5,5),'2025-12-31')
+        self.assertEqual(source_day_for_hour('2026-11-16',7,8),'2026-11-17')
+
     def test_rj4_cycle_from_first_t1_to_last_t3(self):
         result=schedule([7,15,23],True)
         self.assertEqual(result['hour_order'][0],7)

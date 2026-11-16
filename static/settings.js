@@ -13,10 +13,10 @@ function showSchedule(){
   });
   const range=document.getElementById('schedule-range'),hours=document.getElementById('schedule-hours');hours.replaceChildren();
   if(!valid){range.textContent='Preencha T1, T2 e T3 em sequência, com inícios diferentes.';return;}
-  const first=starts[0],last=(first+23)%24;range.textContent=String(first).padStart(2,'0')+'h → '+String(last).padStart(2,'0')+'h · T1 ao fim do T3';
+  const first=starts[0],last=(first+23)%24;range.textContent=String(first).padStart(2,'0')+'h D0 → '+String(last).padStart(2,'0')+'h '+(first===0?'D0':'D+1')+' · T1 ao fim do T3';
   for(let offset=0;offset<24;offset++){
     const h=(first+offset)%24,t=offset<(starts[1]-first+24)%24?1:offset<(starts[2]-first+24)%24?2:3;
-    const item=document.createElement('span');item.className='preview-t'+t;item.textContent=String(h).padStart(2,'0')+'h';item.title='T'+t;hours.append(item);
+    const item=document.createElement('span');item.className='preview-t'+t;item.textContent=String(h).padStart(2,'0')+'h '+(h<first?'D+1':'D0');item.title='T'+t;hours.append(item);
   }
 }
 inputs.forEach(input=>input.addEventListener('input',showSchedule));showSchedule();

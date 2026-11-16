@@ -65,9 +65,9 @@ Abra **Configurações**, escolha o SOC e informe o início de T1, T2 e T3. A ba
 
 O gráfico, a matriz por operador e a faixa de horas preservadas começam no início do T1 e terminam uma hora antes do seu reinício, após o T3. Exemplos: T1 às 07h resulta em 07h–06h; T1 às 06h resulta em 06h–05h. A configuração de uma unidade não modifica outra.
 
-Sem configuração salva, a ordem de exibição é 07h–06h e os turnos não são presumidos. T2 e T3 ficam em branco no formulário até o usuário informar os horários reais. Não há associação automática entre siglas RJ1/RJ4 e nomes de SOC.
+Sem configuração salva, a ordem da visão individual é 06h D0–05h D+1 para todos os SOCs, exceto SoC_RJ_Jacarepagua (07h D0–06h D+1). Configuração salva tem prioridade. Os turnos não são presumidos. T2 e T3 ficam em branco no formulário até o usuário informar os horários reais. Não há associação automática entre siglas RJ1/RJ4 e nomes de SOC.
 
-Na Produção, use Dia completo/T1/T2/T3 para filtrar indicadores, Pareto e operadores. O gráfico mantém as 24 horas ordenadas e atenua os outros turnos. A configuração é compartilhada entre as contas autorizadas e aplicada aos dias consultados; as datas, horas e contagens armazenadas não são regravadas. O cutoff da fonte continua sendo o dia operacional de referência.
+Na Produção, use Dia completo/T1/T2/T3 para filtrar indicadores, Pareto e operadores. O gráfico mantém as 24 horas ordenadas e atenua os outros turnos. A configuração é compartilhada entre as contas autorizadas e aplicada aos dias consultados; as datas, horas e contagens armazenadas não são regravadas. O cutoff bruto da fonte é preservado com corte às 06h. A consulta reconstrói a data civil (cutoff + 1 dia para 00h–05h) e aplica o início do T1 da unidade. Assim, as 06h que fecham o ciclo 07h–06h vêm do cutoff seguinte, nunca das 06h de D0. A consulta usa a mesma regra para indicadores, gráfico, operadores, motivos e cobertura. A visão geral sempre usa o ciclo comum 06h D0–05h D+1 para todas as unidades, independentemente das configurações individuais.
 
 Os horários são persistidos em `eha_unit_settings`, com versão e conta responsável. Cada gravação gera auditoria em `eha_unit_settings_audit`. O formulário impede que uma versão antiga sobrescreva silenciosamente uma alteração mais recente. As tabelas são criadas automaticamente na inicialização do serviço.
 
@@ -80,8 +80,8 @@ year_resolved month_resolved week_resolved cutoff hora_resolucao soc_name
 exception_reason operator fluxo resolved_shipment resolved_bips sub_area before_station_type
 ```
 
-- `cutoff` é o **dia operacional já definido na fonte**, preservado sem deslocar a madrugada. Aceita data ISO, `dd/mm/aaaa` e serial de data nativo do Sheets.
-- `hora_resolucao` é um inteiro de 0 a 23. O gráfico apresenta 00h–23h, sem inferir turnos.
+- `cutoff` é o **dia operacional da fonte com corte às 06h**, preservado no armazenamento. A visão individual ajusta a consulta à jornada da unidade, sem regravar as coletas. Aceita data ISO, `dd/mm/aaaa` e serial de data nativo do Sheets.
+- `hora_resolucao` é um inteiro de 0 a 23. A rede apresenta 06h D0–05h D+1; o detalhe apresenta o ciclo da unidade, com indicação D0/D+1.
 - `resolved_bips` é o principal. `resolved_shipment` é secundário. Ambos são somas da base agregada, sem afirmar quantidade de remessas únicas entre linhas.
 - Cada combinação cutoff + hora + SOC contém o conjunto completo das linhas daquela hora/estação. Dimensões iguais dentro da carga são somadas.
 - Cabeçalhos obrigatórios ausentes/duplicados, contagem vazia, negativa ou fracionária, SOC vazio e data/hora inválida rejeitam a carga inteira. A última carga válida continua disponível.

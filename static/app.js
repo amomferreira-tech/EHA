@@ -5,7 +5,10 @@ const pct=n=>(n*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short=s=>String(s).replace(/^SoC_/i,'').replaceAll('_',' · ');
 const norm=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replaceAll('_',' ');
-let HOURS=Array.from({length:24},(_,i)=>(i+7)%24);
+const NETWORK_HOURS=Array.from({length:24},(_,i)=>(i+6)%24);
+let HOURS=[...NETWORK_HOURS];
+const hourDay=h=>h<(current?.schedule?.starts[0]??6)?'D+1':'D0';
+const hourLabel=h=>String(h).padStart(2,'0')+'h '+hourDay(h);
 let view='overall',current=null,selectedHour=null,peopleLimit=100,version=0,catalog=null,operatorStation='',selectedShift='';
 const expandedOperators=new Set();
 async function api(url){const r=await fetch(url);if(r.status===401){location.href='/login';throw Error('Sua sessão expirou.');}const d=await r.json();if(!r.ok)throw Error(d.error||'Não foi possível consultar os dados.');return d;}
@@ -17,18 +20,18 @@ function paintNetwork(){
   if(!current||current.view!=='overall')return;
   const q=norm($('network-search').value);const rows=current.matrix.filter(r=>norm(r.soc).includes(q));
   $('overall-bips').textContent=fmt(current.bips);$('soc-count').textContent=fmt(current.active_socs);$('network-hours').textContent=current.coverage.length+' de 24 horas com registros salvos';
-  $('matrix-head').innerHTML='<tr><th>ESTAÇÃO</th><th>TOTAL BIPS</th>'+Array.from({length:24},(_,h)=>`<th>${String(h).padStart(2,'0')}h</th>`).join('')+'</tr>';
+  $('matrix-head').innerHTML='<tr><th>ESTAÇÃO</th><th>TOTAL BIPS</th>'+NETWORK_HOURS.map(h=>`<th>${String(h).padStart(2,'0')}h<small class="day-marker">${h<6?'D+1':'D0'}</small></th>`).join('')+'</tr>';
   const max=Math.max(1,...rows.flatMap(r=>r.hours.filter(n=>n!==null)));
-  $('matrix-body').innerHTML=rows.map(r=>`<tr><td><button class="soc-link" data-soc="${esc(r.soc)}">${esc(short(r.soc))}<span>Ver detalhe ↗</span></button></td><td>${r.hours.some(n=>n!==null)?fmt(r.bips):'—'}</td>${r.hours.map(n=>`<td ${n===null?'':`style="background:rgba(238,77,45,${.025+.2*n/max})"`}>${n===null?'—':fmt(n)}</td>`).join('')}</tr>`).join('');
+  $('matrix-body').innerHTML=rows.map(r=>`<tr><td><button class="soc-link" data-soc="${esc(r.soc)}">${esc(short(r.soc))}<span>Ver detalhe ↗</span></button></td><td>${r.hours.some(n=>n!==null)?fmt(r.bips):'—'}</td>${NETWORK_HOURS.map(h=>{const n=r.hours[h];return `<td ${n===null?'':`style="background:rgba(238,77,45,${.025+.2*n/max})"`}>${n===null?'—':fmt(n)}</td>`;}).join('')}</tr>`).join('');
   const total=rows.reduce((n,r)=>n+r.bips,0);
-  const hours=Array.from({length:24},(_,h)=>{const values=rows.map(r=>r.hours[h]).filter(n=>n!==null);return values.length?fmt(values.reduce((a,b)=>a+b,0)):'—';});
+  const hours=NETWORK_HOURS.map(h=>{const values=rows.map(r=>r.hours[h]).filter(n=>n!==null);return values.length?fmt(values.reduce((a,b)=>a+b,0)):'—';});
   $('matrix-foot').innerHTML=rows.length?`<tr><td>${q?'TOTAL DO FILTRO':'TOTAL DA REDE'}</td><td>${fmt(total)}</td>${hours.map(v=>`<td>${v}</td>`).join('')}</tr>`:'';
   $('network-empty').hidden=rows.length>0;$('network-empty').textContent=q?'Nenhuma estação encontrada.':'Nenhum SOC foi encontrado no histórico.';
 }
 function paintHourChart(series){
   const max=Math.max(1,...series.map(r=>r.bips));
   const byHour=new Map(series.map(r=>[r.hour,r]));const shiftHours=current?.schedule?.shifts.find(s=>s.id===selectedShift)?.hours;const boundaries=new Set(current?.schedule?.shifts.map(s=>s.start)||[]);
-  $('chart').innerHTML=HOURS.map(h=>byHour.get(h)).map(r=>`<button class="hour-bar ${r.observed?'':'missing'} ${selectedHour===r.hour?'selected':''} ${shiftHours&&!shiftHours.includes(r.hour)?'outside-shift':''} ${boundaries.has(r.hour)?'turn-start':''}" data-hour="${r.hour}" aria-label="${r.hour} horas: ${r.observed?fmt(r.bips)+' bips':'sem registro'}" aria-pressed="${selectedHour===r.hour}" title="${r.hour}h · ${r.observed?fmt(r.bips)+' bips':'sem registro'}"><b>${r.observed?fmt(r.bips):''}</b><i style="height:${r.observed?Math.max(2,r.bips/max*160):2}px"></i><span>${String(r.hour).padStart(2,'0')}</span></button>`).join('');
+  $('chart').innerHTML=HOURS.map(h=>byHour.get(h)).map(r=>`<button class="hour-bar ${r.observed?'':'missing'} ${selectedHour===r.hour?'selected':''} ${shiftHours&&!shiftHours.includes(r.hour)?'outside-shift':''} ${boundaries.has(r.hour)?'turn-start':''}" data-hour="${r.hour}" aria-label="${hourLabel(r.hour)}: ${r.observed?fmt(r.bips)+' bips':'sem registro'}" aria-pressed="${selectedHour===r.hour}" title="${hourLabel(r.hour)} · ${r.observed?fmt(r.bips)+' bips':'sem registro'}"><b>${r.observed?fmt(r.bips):''}</b><i style="height:${r.observed?Math.max(2,r.bips/max*160):2}px"></i><span>${String(r.hour).padStart(2,'0')}<small class="day-marker">${hourDay(r.hour)}</small></span></button>`).join('');
 }
 function paintPareto(rows,total){
   if(!rows.length||!total){$('pareto-chart').innerHTML='<p class="no-data">Sem bips para compor o Pareto neste recorte.</p>';$('pareto-key').replaceChildren();$('pareto-insight').textContent='Sem volume no recorte';return;}
@@ -44,7 +47,7 @@ function paintPareto(rows,total){
   $('pareto-key').innerHTML=rows.map((r,i)=>`<button class="pareto-label" data-reason="${esc(r.name)}" title="Filtrar este motivo"><b>${i+1}</b><span>${esc(r.name)}</span><strong>${pct(r.share)}</strong></button>`).join('');
   const count=rows.findIndex(r=>r.cumulative>=.8)+1;$('pareto-insight').textContent=`${count} ${count===1?'motivo concentra':'motivos concentram'} ${pct(rows[count-1].cumulative)} dos bips`;
 }
-function miniHours(hours){return '<div class="mini-hours">'+HOURS.map(h=>({h,n:hours[h]})).map(({n,h})=>n>0?`<span><small>${String(h).padStart(2,'0')}h</small><b>${fmt(n)}</b></span>`:'').join('')+'</div>';}
+function miniHours(hours){return '<div class="mini-hours">'+HOURS.map(h=>({h,n:hours[h]})).map(({n,h})=>n>0?`<span><small>${hourLabel(h)}</small><b>${fmt(n)}</b></span>`:'').join('')+'</div>';}
 function paintReasons(rows){$('reason-count').textContent=rows.length+' motivos';$('reason-rows').innerHTML=rows.map(r=>`<tr><td><details class="reason-detail"><summary>${esc(r.name)}</summary><p>${fmt(r.operators)} colaboradores com registro</p>${miniHours(r.hours)}</details></td><td>${fmt(r.bips)}</td><td>${fmt(r.shipments)}</td><td>${pct(r.share)}</td><td>${pct(r.cumulative)}</td></tr>`).join('')||'<tr><td colspan="5">Sem registros neste recorte.</td></tr>';}
 function paintPeople(){
   if(!current||current.view!=='soc')return;
@@ -54,7 +57,7 @@ function paintPeople(){
   const shiftHours=current.schedule?.shifts.find(s=>s.id===selectedShift)?.hours||HOURS;
   const visibleHours=new Set(shiftHours.filter(h=>selectedHour===null||h===selectedHour));
   const cell=(hours,h)=>observed.has(h)&&visibleHours.has(h)?fmt(hours[h]||0):'—';
-  $('people-head').innerHTML='<tr><th scope="col">OPERADOR</th><th scope="col">TOTAL BIPS</th>'+HOURS.map(h=>`<th scope="col"><button class="operator-hour" data-hour="${h}" aria-label="Filtrar ${h} horas">${String(h).padStart(2,'0')}h<small>${observed.has(h)?'SALVO':'SEM REGISTRO'}</small></button></th>`).join('')+'</tr>';
+  $('people-head').innerHTML='<tr><th scope="col">OPERADOR</th><th scope="col">TOTAL BIPS</th>'+HOURS.map(h=>`<th scope="col"><button class="operator-hour" data-hour="${h}" aria-label="Filtrar ${hourLabel(h)}">${String(h).padStart(2,'0')}h<small class="day-marker">${hourDay(h)}</small><small>${observed.has(h)?'SALVO':'SEM REGISTRO'}</small></button></th>`).join('')+'</tr>';
   const totals=Array(24).fill(0);rows.forEach(p=>p.hours.forEach((n,h)=>totals[h]+=n));
   const bips=rows.reduce((n,p)=>n+p.bips,0),shipments=rows.reduce((n,p)=>n+p.shipments,0);
   $('people-total').textContent=fmt(bips)+' bips · '+fmt(shipments)+' pacotes';
@@ -70,7 +73,7 @@ function paintPeople(){
 function paintShiftControls(data){
   const definition=data.schedule,first=definition.hour_order[0],last=definition.hour_order[23];
   const hh=h=>String(h).padStart(2,'0')+'h';
-  $('hour-range').textContent=hh(first)+' → '+hh(last)+(definition.configured?' · Do início do T1 à última hora do T3':' · Ordem padrão, configure os turnos da unidade');
+  $('hour-range').textContent=hh(first)+' D0 → '+hh(last)+(first===0?' D0':' D+1')+(definition.configured?' · Do início do T1 à última hora do T3':' · Ordem padrão, configure os turnos da unidade');
   $('schedule-note').hidden=definition.configured;
   $('schedule-note').innerHTML='Horários ainda não definidos para este SOC. <a href="/settings?soc='+encodeURIComponent(data.soc)+'">Configurar T1, T2 e T3</a>.';
   $('shift-tabs').innerHTML=definition.configured?`<button data-shift="" aria-pressed="${!selectedShift}">Dia completo<small>${hh(first)} → ${hh(last)}</small></button>`+definition.shifts.map(s=>`<button data-shift="${s.id}" aria-pressed="${selectedShift===s.id}">${s.name}<small>${hh(s.start)}–${hh(s.end)}</small></button>`).join(''):'';
@@ -79,13 +82,13 @@ function paintShiftControls(data){
 function paintSoc(data){
   HOURS=data.schedule.hour_order;selectedShift=data.shift||'';paintShiftControls(data);
   $('soc-content').hidden=false;$('pick-soc').hidden=true;$('soc-title').textContent=short(data.soc);$('scope').textContent=short(data.soc)+' · somente esta estação';
-  const period=selectedHour===null?(selectedShift?selectedShift.toUpperCase()+' · Turno selecionado':'Dia completo'):String(selectedHour).padStart(2,'0')+'h · Hora selecionada';$('detail-period').textContent=period;$('hour-caption').textContent=period;$('bips-caption').textContent=period;
+  const period=selectedHour===null?(selectedShift?selectedShift.toUpperCase()+' · Turno selecionado':'Dia completo'):hourLabel(selectedHour)+' · Hora selecionada';$('detail-period').textContent=period;$('hour-caption').textContent=period;$('bips-caption').textContent=period;
   $('bips').textContent=fmt(data.bips);$('shipments').textContent=fmt(data.shipments);$('operators').textContent=fmt(data.operators);$('saved-hours').textContent=data.coverage.length+'/24';$('saved-range').textContent=data.coverage.length?'Do dia operacional selecionado':'Aguardando a primeira observação';$('empty').hidden=data.series.some(r=>r.observed);$('clear-hour').hidden=selectedHour===null;
   options($('flow'),data.available_flows,'Todos os fluxos');options($('reason'),data.available_reasons,'Todos os motivos');
   paintHourChart(data.daily_series);paintPareto(data.reasons,data.bips);paintReasons(data.reasons);paintPeople();
   $('flows').innerHTML=data.flows.map(r=>`<div class="reason"><div class="reason-line"><span>${esc(r.name)}</span><b>${fmt(r.bips)} · ${pct(data.bips?r.bips/data.bips:0)}</b></div><div class="track"><i style="width:${data.bips?r.bips/data.bips*100:0}%"></i></div></div>`).join('')||'<p class="no-data">Sem fluxo registrado.</p>';
   $('flow-summary').textContent=`${fmt(data.bips)} bips · ${fmt(data.shipments)} pacotes no recorte`;
-  const coverage=new Map(data.coverage.map(r=>[r.hour,r]));$('coverage').innerHTML=HOURS.map(h=>`<span class="${coverage.has(h)?'saved':''}" title="${coverage.has(h)?'Hora preservada. Última observação: '+new Date(coverage.get(h).last_seen).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'Sem observação salva'}">${String(h).padStart(2,'0')}h</span>`).join('');
+  const coverage=new Map(data.coverage.map(r=>[r.hour,r]));$('coverage').innerHTML=HOURS.map(h=>`<span class="${coverage.has(h)?'saved':''}" title="${coverage.has(h)?'Hora preservada. Última observação: '+new Date(coverage.get(h).last_seen).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'Sem observação salva'}">${String(h).padStart(2,'0')}h ${hourDay(h)}</span>`).join('');
 }
 async function load(){
   const requestVersion=++version;if(!$('day').value)return;
