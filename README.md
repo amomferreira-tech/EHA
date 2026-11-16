@@ -17,14 +17,12 @@ O nome e a identidade são uma proposta inicial. Não são usados dados demonstr
 
 ## Subir no Railway
 
-Crie um projeto novo com **PostgreSQL e dois serviços ligados a este repositório**:
+Crie um projeto com **PostgreSQL e um serviço EHA ligado a este repositório**. Use o arquivo padrão 
+ailway.toml, exponha uma URL pública e mantenha /healthz como healthcheck. O Dockerfile executa python start.py, que cria as tabelas e inicia o Web e o coletor no mesmo serviço. A coleta começa automaticamente e se repete a cada SYNC_SECONDS.
 
-| Serviço | Configuração Railway | Função |
-| --- | --- | --- |
-| Web | `railway.toml` | Painel, login e API |
-| Coletor | `railway.worker.toml` | Leitura periódica da planilha |
+Cadastre todas as variáveis de Web e Coletor listadas abaixo no serviço EHA. Não é necessário criar um segundo serviço de aplicação. O supervisor encerra os dois processos e permite ao Railway reiniciar o serviço se um deles sair inesperadamente; os locks do banco impedem gravações simultâneas de coletores.
 
-No serviço Coletor, em Settings → Config-as-code, selecione `/railway.worker.toml`. Ele usa `python worker.py` e **não tem healthcheck HTTP nem domínio público**. No Web, use o arquivo padrão, exponha uma URL pública e mantenha `/healthz` como healthcheck. O Dockerfile é comum aos dois serviços. O Web executa `python start.py`, cria as tabelas e inicia Gunicorn na porta `PORT`. O coletor também cria as tabelas quando inicia. As migrações iniciais são idempotentes e serializadas por lock.
+Se preferir separar os processos futuramente, use RUN_COLLECTOR=false no Web e crie o serviço Coletor com /railway.worker.toml e as variáveis da coleta. O coletor separado não precisa de domínio público nem healthcheck HTTP.
 
 ### Variáveis
 

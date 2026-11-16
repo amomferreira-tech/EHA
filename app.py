@@ -189,6 +189,7 @@ def create_app():
         status=store.sync_status()
         good=status['last_success']
         result['sync']={'last_success':good.isoformat() if good else None,
+            'error':status['last'].get('error') if status['last'] and status['last']['status']=='error' else None,
             'failed':bool(status['last'] and status['last']['status']=='error'),
             'stale':not good or (datetime.now(timezone.utc)-good).total_seconds()>max(900,int(os.getenv('SYNC_SECONDS','300'))*3)}
         return jsonify(result)

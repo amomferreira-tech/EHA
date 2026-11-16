@@ -15,6 +15,7 @@ function paint(data){
   $('scope').textContent=$('soc').value?short($('soc').value):'Todos os SOCs · Visão da rede';
   const sync=data.sync, stamp=sync.last_success?new Date(sync.last_success).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}):'nenhuma coleta';
   $('sync').textContent=(sync.failed?'Falha na coleta · ':sync.stale?'Atualização pendente · ':'Última coleta · ')+stamp;
+  if(sync.failed&&sync.error){$('error').textContent=sync.error;$('error').hidden=false;}
   $('sync').className=sync.failed||sync.stale?'warning':'good';
   const max=Math.max(1,...data.series.map(r=>r.bips));
   $('chart').innerHTML=data.series.map(r=>`<button class="hour-bar ${r.observed?'':'missing'} ${selectedHour===r.hour?'selected':''}" data-hour="${r.hour}" aria-label="${r.hour} horas: ${r.observed?fmt(r.bips)+' bips':'sem registro'}" title="${r.hour}h · ${r.observed?fmt(r.bips)+' bips':'Sem registro'}" aria-pressed="${selectedHour===r.hour}"><b>${r.observed&&r.bips>0?fmt(r.bips):''}</b><i style="height:${r.observed?Math.max(2,r.bips/max*155):2}px"></i><span>${String(r.hour).padStart(2,'0')}</span></button>`).join('');
