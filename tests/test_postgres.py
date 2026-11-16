@@ -10,6 +10,26 @@ from test_domain import HEAD,row
 
 @unittest.skipUnless(os.getenv('TEST_DATABASE_URL'),'Defina TEST_DATABASE_URL para um banco exclusivo de teste.')
 class PostgresTests(unittest.TestCase):
+    def test_rolling_four_hour_window_retains_older_hours(self):
+        with patch.dict(os.environ,DATABASE_URL=os.environ['TEST_DATABASE_URL']):
+            migrate()
+            conn=connection()
+            try:
+                self.assertEqual(conn.execute('SELECT count(*) AS n FROM eha_latest').fetchone()['n'],0)
+                run=conn.execute("INSERT INTO eha_runs(status) VALUES('running') RETURNING id").fetchone()['id']
+                for start in (7,8,9,10):
+                    window=normalize([HEAD,*[row(hour=h,bips=h) for h in range(start,start+4)]])
+                    save_buckets(conn,run,window)
+                hours=conn.execute('SELECT hour FROM eha_latest ORDER BY hour').fetchall()
+                self.assertEqual([r['hour'] for r in hours],list(range(7,14)))
+                self.assertEqual(conn.execute('SELECT count(*) AS n FROM eha_revisions').fetchone()['n'],7)
+                result=conn.execute('''SELECT sum(f.bips) AS bips FROM eha_latest l
+                    JOIN eha_facts f ON f.revision_id=l.revision_id''').fetchone()
+                self.assertEqual(result['bips'],sum(range(7,14)))
+            finally:
+                conn.rollback()
+                conn.close()
+
     def test_idempotency_revision_and_missing_buckets(self):
         with patch.dict(os.environ,DATABASE_URL=os.environ['TEST_DATABASE_URL']):
             migrate()

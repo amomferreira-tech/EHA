@@ -1,5 +1,5 @@
 import unittest
-from domain import normalize, summarize, fingerprint
+from domain import normalize, summarize, fingerprint,overall
 
 HEAD = ['year_resolved','month_resolved','week_resolved','cutoff','hora_resolucao','soc_name',
         'exception_reason','operator','fluxo','resolved_shipment','resolved_bips','sub_area','before_station_type']
@@ -48,6 +48,34 @@ class DomainTests(unittest.TestCase):
         result=summarize([dict(r,hour=7) for r in next(iter(records.values()))],['SOC A'],'2026-11-16')
         self.assertTrue(result['series'][7]['observed'])
         self.assertEqual(result['matrix'][0]['hours'][7],0)
+
+    def test_pareto_uses_exception_reason_and_not_sub_area(self):
+        a=row(reason='Etiqueta avariada',bips=70)
+        b=row(reason='Reembalagem',bips=20)
+        c=row(reason='Outros',bips=10)
+        a[11]=b[11]=c[11]='Campo interno que não é motivo'
+        source=normalize([HEAD,a,b,c])
+        rows=[dict(r,hour=7) for rs in source.values() for r in rs]
+        result=summarize(rows,['SOC A'],'2026-11-16',soc='SOC A')
+        self.assertEqual([r['name'] for r in result['reasons']],['Etiqueta avariada','Reembalagem','Outros'])
+        self.assertEqual([r['cumulative'] for r in result['reasons']],[.7,.9,1])
+        self.assertEqual(sum(r['bips'] for r in result['reasons']),result['bips'])
+        detail=summarize(rows,['SOC A'],'2026-11-16',soc='SOC A',reason='Reembalagem')
+        self.assertEqual(detail['bips'],20)
+
+    def test_source_does_not_require_sub_area_column(self):
+        header=HEAD[:11]+HEAD[12:]
+        source_row=row()
+        result=normalize([header,source_row[:11]+source_row[12:]])
+        record=next(iter(result.values()))[0]
+        self.assertEqual(record['exception_reason'],'Etiqueta')
+        self.assertEqual(record['bips'],8)
+
+    def test_overall_keeps_missing_distinct_from_zero(self):
+        result=overall([dict(soc_name='A',hour=2,bips=0)],['A','B'],'2026-11-16')
+        station=next(r for r in result['matrix'] if r['soc']=='A')
+        self.assertEqual(station['hours'][2],0)
+        self.assertIsNone(station['hours'][1])
 
 
 if __name__=='__main__':

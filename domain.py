@@ -6,7 +6,7 @@ import hashlib
 import json
 
 DIMS = ('soc_name', 'operator', 'exception_reason', 'fluxo', 'sub_area', 'before_station_type')
-REQUIRED = ('cutoff', 'hora_resolucao', *DIMS, 'resolved_shipment', 'resolved_bips')
+REQUIRED = ('cutoff', 'hora_resolucao', *(k for k in DIMS if k!='sub_area'), 'resolved_shipment', 'resolved_bips')
 
 
 def integer(value):
@@ -40,6 +40,8 @@ def normalize(values):
     if any(headers.count(k) != 1 for k in REQUIRED):
         raise ValueError('Cabeçalhos ausentes ou duplicados na fonte.')
     positions = {k: headers.index(k) for k in REQUIRED}
+    if headers.count('sub_area')==1:
+        positions['sub_area']=headers.index('sub_area')
     grouped = defaultdict(lambda: [0, 0])
     for line, row in enumerate(values[1:], 2):
         if not any(str(v).strip() for v in row):
@@ -50,7 +52,7 @@ def normalize(values):
             hour = integer(data['hora_resolucao'])
             if hour > 23 or not str(data['soc_name']).strip():
                 raise ValueError('Hora ou estação inválida.')
-            dims = tuple(str(data[k]).strip() for k in DIMS)
+            dims = tuple(str(data.get(k,'')).strip() for k in DIMS)
             key = (day, hour, *dims)
             grouped[key][0] += integer(data['resolved_bips'])
             grouped[key][1] += integer(data['resolved_shipment'])
@@ -69,14 +71,15 @@ def fingerprint(rows):
                                     separators=(',', ':')).encode()).hexdigest()
 
 
-def summarize(rows, stations, day, soc='', flow='', subarea='', hour=None):
+def summarize(rows, stations, day, soc='', flow='', hour=None, reason=''):
     filtered = [r for r in rows if (not soc or r['soc_name'] == soc)
-                and (not flow or r['fluxo'] == flow) and (not subarea or r['sub_area'] == subarea)]
+                and (not flow or r['fluxo'] == flow)
+                and (not reason or (r['exception_reason'] or 'Não informado') == reason)]
     if hour is not None:
         filtered = [r for r in filtered if r['hour'] == hour]
     series = [dict(hour=h, bips=0, shipments=0, observed=False) for h in range(24)]
-    matrix = {s: dict(soc=s, bips=0, shipments=0, hours=[None]*24) for s in stations}
-    operators, reasons = {}, defaultdict(int)
+    matrix = {s: dict(soc=s, bips=0, shipments=0, hours=[None]*24) for s in ([soc] if soc else stations)}
+    operators, reasons, flows = {}, {}, defaultdict(int)
     for r in filtered:
         h, b, p = r['hour'], r['bips'], r['shipments']
         for k, v in [('bips', b), ('shipments', p)]:
@@ -91,13 +94,43 @@ def summarize(rows, stations, day, soc='', flow='', subarea='', hour=None):
         op['shipments'] += p
         op['hours'][h] += b
         op['reasons'][r['exception_reason'] or 'Não informado'] += b
-        reasons[r['exception_reason'] or 'Não informado'] += b
+        reason_name=r['exception_reason'] or 'Não informado'
+        entry=reasons.setdefault(reason_name,dict(name=reason_name,bips=0,shipments=0,hours=[0]*24,operators=set()))
+        entry['bips']+=b
+        entry['shipments']+=p
+        entry['hours'][h]+=b
+        if r['operator']:
+            entry['operators'].add((r['soc_name'],r['operator']))
+        flows[r['fluxo'] or 'Não informado']+=b
     ops = sorted(operators.values(), key=lambda r: (-r['bips'], r['name']))
     for op in ops:
         op['reasons'] = sorted([dict(name=k, bips=v) for k, v in op['reasons'].items()], key=lambda r: -r['bips'])
     observed = [r for r in series if r['observed']]
     peak = max(observed, key=lambda r: r['bips']) if observed else None
-    return dict(day=day, bips=sum(r['bips'] for r in filtered), shipments=sum(r['shipments'] for r in filtered),
+    bips=sum(r['bips'] for r in filtered)
+    pareto=sorted(reasons.values(),key=lambda r:(-r['bips'],r['name']))
+    accumulated=0
+    for r in pareto:
+        accumulated+=r['bips']
+        r['operators']=len(r['operators'])
+        r['share']=r['bips']/bips if bips else 0
+        r['cumulative']=accumulated/bips if bips else 0
+    return dict(day=day, bips=bips, shipments=sum(r['shipments'] for r in filtered),
                 operators=len(ops), active_socs=len({r['soc_name'] for r in filtered}), peak=peak,
                 series=series, matrix=sorted(matrix.values(), key=lambda r: (-r['bips'], r['soc'])),
-                people=ops, reasons=sorted([dict(name=k, bips=v) for k,v in reasons.items()], key=lambda r: -r['bips']))
+                people=ops, reasons=pareto,flows=sorted([dict(name=k,bips=v) for k,v in flows.items()],key=lambda r:-r['bips']))
+
+
+def overall(rows,stations,day):
+    """Consolidado H/H sem dados de colaboradores e motivos."""
+    matrix={s:dict(soc=s,bips=0,hours=[None]*24) for s in stations}
+    series=[dict(hour=h,bips=0,observed=False) for h in range(24)]
+    for r in rows:
+        h,b=r['hour'],r['bips']
+        item=matrix.setdefault(r['soc_name'],dict(soc=r['soc_name'],bips=0,hours=[None]*24))
+        item['bips']+=b
+        item['hours'][h]=(item['hours'][h] or 0)+b
+        series[h]['bips']+=b
+        series[h]['observed']=True
+    return dict(day=day,bips=sum(r['bips'] for r in rows),series=series,
+        matrix=sorted(matrix.values(),key=lambda r:(-r['bips'],r['soc'])),active_socs=len({r['soc_name'] for r in rows}))

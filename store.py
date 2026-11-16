@@ -44,15 +44,28 @@ def catalog():
         days = [r['day'].isoformat() for r in conn.execute('SELECT DISTINCT day FROM eha_latest ORDER BY 1 DESC')]
         flows = [r['fluxo'] for r in conn.execute('''SELECT DISTINCT f.fluxo FROM eha_latest l
             JOIN eha_facts f ON f.revision_id=l.revision_id WHERE f.fluxo<>'' ORDER BY 1''')]
-        subareas = [r['sub_area'] for r in conn.execute('''SELECT DISTINCT f.sub_area FROM eha_latest l
-            JOIN eha_facts f ON f.revision_id=l.revision_id WHERE f.sub_area<>'' ORDER BY 1''')]
-    return dict(stations=stations,days=days,flows=flows,subareas=subareas)
+    return dict(stations=stations,days=days,flows=flows)
 
 
-def read_day(day):
+def read_day(day,soc):
     with connection() as conn:
         return conn.execute('''SELECT l.hour,f.* FROM eha_latest l JOIN eha_facts f
-            ON f.revision_id=l.revision_id WHERE l.day=%s ORDER BY l.hour,f.soc_name''', (day,)).fetchall()
+            ON f.revision_id=l.revision_id WHERE l.day=%s AND l.soc_name=%s ORDER BY l.hour''', (day,soc)).fetchall()
+
+
+def read_overall(day):
+    with connection() as conn:
+        return conn.execute('''SELECT l.soc_name,l.hour,sum(f.bips)::bigint AS bips FROM eha_latest l
+            JOIN eha_facts f ON f.revision_id=l.revision_id WHERE l.day=%s
+            GROUP BY l.soc_name,l.hour ORDER BY l.soc_name,l.hour''',(day,)).fetchall()
+
+
+def coverage(day,soc=''):
+    with connection() as conn:
+        rows=conn.execute('''SELECT hour,max(last_seen_at) AS last_seen,count(*) AS stations
+            FROM eha_latest WHERE day=%s AND (%s='' OR soc_name=%s)
+            GROUP BY hour ORDER BY hour''',(day,soc,soc)).fetchall()
+    return [dict(hour=r['hour'],last_seen=r['last_seen'].isoformat(),stations=r['stations']) for r in rows]
 
 
 def sync_status():

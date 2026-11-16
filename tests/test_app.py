@@ -42,17 +42,46 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.client.post('/station',data={'station':'SOC A','csrf':'test-csrf'}).status_code,302)
         pref.assert_called_once_with('test@shopee.com','SOC A')
 
+    @patch('store.coverage',return_value=[])
     @patch('store.sync_status',return_value={'last':{'status':'ok'},'last_success':datetime.now(timezone.utc)})
     @patch('store.read_day',return_value=[dict(hour=7,soc_name='SOC A',operator='Ana',bips=8,shipments=3,
             exception_reason='Etiqueta',fluxo='FWD',sub_area='Reimpressão'),dict(hour=7,soc_name='SOC B',
             operator='Bia',bips=5,shipments=2,exception_reason='Etiqueta',fluxo='FWD',sub_area='Reimpressão')])
     @patch('store.catalog',return_value={'stations':['SOC A','SOC B']})
-    def test_selected_station_keeps_network_matrix(self,*mocks):
+    def test_selected_station_contains_only_that_soc(self,*mocks):
         self.enter()
         result=self.client.get('/api/dashboard?day=2026-11-16&soc=SOC+A').get_json()
         self.assertEqual(result['bips'],8)
-        self.assertEqual(sum(r['bips'] for r in result['matrix']),13)
+        self.assertEqual(sum(r['bips'] for r in result['matrix']),8)
+        self.assertEqual([r['soc'] for r in result['matrix']],['SOC A'])
+        self.assertEqual([r['name'] for r in result['people']],['Ana'])
+        self.assertEqual(result['available_reasons'],['Etiqueta'])
         self.assertFalse(result['sync']['stale'])
+
+    @patch('store.coverage',return_value=[])
+    @patch('store.sync_status',return_value={'last':{'status':'ok'},'last_success':datetime.now(timezone.utc)})
+    @patch('store.read_overall',return_value=[dict(soc_name='SOC A',hour=7,bips=8),dict(soc_name='SOC B',hour=8,bips=5)])
+    @patch('store.catalog',return_value={'stations':['SOC A','SOC B']})
+    def test_overall_returns_only_hourly_production(self,*mocks):
+        self.enter()
+        result=self.client.get('/api/dashboard?view=overall&day=2026-11-16').get_json()
+        self.assertEqual(result['bips'],13)
+        self.assertEqual(len(result['matrix']),2)
+        for key in ('people','reasons','subareas','flows'):
+            self.assertNotIn(key,result)
+
+    @patch('store.catalog',return_value={'stations':['SOC A']})
+    def test_soc_view_requires_station(self,*mocks):
+        self.enter()
+        self.assertEqual(self.client.get('/api/dashboard?view=soc&day=2026-11-16').status_code,400)
+
+    def test_dashboard_has_real_tabs_and_no_subarea(self):
+        self.enter()
+        text=self.client.get('/').get_data(as_text=True)
+        self.assertIn('role="tabpanel"',text)
+        self.assertIn('data-searchable id="soc"',text)
+        self.assertNotIn('sidebar',text)
+        self.assertNotIn('subarea',text.lower())
 
     def test_bad_date_and_hour(self):
         self.enter()

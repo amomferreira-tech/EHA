@@ -10,7 +10,7 @@ from authlib.integrations.flask_client import OAuth
 from flask import Flask, jsonify, redirect, render_template, request, session, abort
 import store
 import seatalk_login
-from domain import summarize
+from domain import summarize,overall
 
 
 def create_app():
@@ -180,12 +180,23 @@ def create_app():
         soc=request.args.get('soc','')
         if soc and soc not in cat['stations']:
             return jsonify(error='Estação inválida.'),400
-        rows=store.read_day(day)
-        result=summarize(rows,cat['stations'],day,soc,
-                         request.args.get('flow',''),request.args.get('subarea',''),hour)
-        if soc:
-            result['matrix']=summarize(rows,cat['stations'],day,'',
-                request.args.get('flow',''),request.args.get('subarea',''),hour)['matrix']
+        view=request.args.get('view','soc' if soc else 'overall')
+        if view not in ('soc','overall') or (view=='soc' and not soc):
+            return jsonify(error='Escolha uma estação para abrir a visão do SOC.'),400
+        if view=='overall':
+            result=overall(store.read_overall(day),cat['stations'],day)
+        else:
+            rows=store.read_day(day,soc)
+            flow=request.args.get('flow','')
+            reason=request.args.get('reason','')
+            result=summarize(rows,[soc],day,soc,flow,hour,reason)
+            result['daily_series']=summarize(rows,[soc],day,soc,flow,reason=reason)['series']
+            result['available_reasons']=sorted({r['exception_reason'] or 'Não informado' for r in rows})
+            result['available_flows']=sorted({r['fluxo'] for r in rows if r['fluxo']})
+            result['soc']=soc
+            result['hour']=hour
+        result['view']=view
+        result['coverage']=store.coverage(day,soc if view=='soc' else '')
         status=store.sync_status()
         good=status['last_success']
         result['sync']={'last_success':good.isoformat() if good else None,

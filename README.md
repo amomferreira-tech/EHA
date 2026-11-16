@@ -4,21 +4,22 @@ Visão de produção da Exception Handling Area, com **bips como indicador princ
 
 ## O que está incluído
 
-- Login corporativo Google e opção Login with SeaTalk.
-- Escolha de estação ou de toda a rede ao entrar; preferência salva por conta.
-- Cards de bips, pacotes, colaboradores por estação e hora de maior volume.
-- Gráfico H/H com seleção de hora, ranking e motivos por colaborador.
-- Matriz de todos os SOCs, mesmo quando uma estação está selecionada nos cards.
-- Filtros por cutoff, SOC, fluxo e subárea; atualização da tela a cada minuto.
-- Coletor autenticado de Google Sheets e histórico PostgreSQL com revisões imutáveis.
-- Layout para computador e celular; marca vetorial em `static/brand/eha-live-logo.webp`.
+- Duas abas independentes no topo: **Visão geral** e **Visão do SOC**, sem navegação lateral por âncoras.
+- Visão geral dedicada à matriz de bips H/H de todos os SOCs, busca de estação e total da rede.
+- Visão do SOC restrita à estação escolhida: indicadores, gráfico H/H, Pareto, motivos detalhados, fluxos e colaboradores.
+- Pareto por `exception_reason`: barras de bips em ordem decrescente, linha de percentual acumulado e referência de 80%.
+- Filtros por cutoff, estação (com digitação), fluxo, motivo da tratativa e hora. Sem subárea nas telas e filtros.
+- Clique em uma hora para filtrar o detalhe; clique em um motivo do Pareto para abrir seu recorte.
+- Horas preservadas no banco indicadas na estação. A janela de quatro horas da fonte não limita o histórico já coletado.
+- Login corporativo Google e opção Login with SeaTalk em destaque.
+- Coletor autenticado de Google Sheets, PostgreSQL com revisões imutáveis e preferência de estação por conta.
+- Layout adaptável para computador e celular; marca Shopito em `static/brand/eha-live-logo.webp`.
 
-O nome e a identidade são uma proposta inicial. Não são usados dados demonstrativos em produção. A aplicação começa vazia e aguarda a primeira coleta válida.
+Não são usados dados demonstrativos em produção. A aplicação começa vazia e aguarda a primeira coleta válida. O login SeaTalk e a visibilidade do Workspace são configurados no portal do aplicativo; o novo público e o One-Tap dependem de aprovação administrativa.
 
 ## Subir no Railway
 
-Crie um projeto com **PostgreSQL e um serviço EHA ligado a este repositório**. Use o arquivo padrão 
-ailway.toml, exponha uma URL pública e mantenha /healthz como healthcheck. O Dockerfile executa python start.py, que cria as tabelas e inicia o Web e o coletor no mesmo serviço. A coleta começa automaticamente e se repete a cada SYNC_SECONDS.
+Crie um projeto com **PostgreSQL e um serviço EHA ligado a este repositório**. Use o arquivo padrão `railway.toml`, exponha uma URL pública e mantenha /healthz como healthcheck. O Dockerfile executa python start.py, que cria as tabelas e inicia o Web e o coletor no mesmo serviço. A coleta começa automaticamente e se repete a cada SYNC_SECONDS.
 
 Cadastre todas as variáveis de Web e Coletor listadas abaixo no serviço EHA. Não é necessário criar um segundo serviço de aplicação. O supervisor encerra os dois processos e permite ao Railway reiniciar o serviço se um deles sair inesperadamente; os locks do banco impedem gravações simultâneas de coletores.
 
@@ -58,7 +59,7 @@ O acesso dos dois provedores é validado no servidor. A configuração inicial p
 
 ## Contrato da base
 
-A aba `DB Resolved`, intervalo `A:M`, deve manter estes cabeçalhos na linha 1 (a ordem pode mudar):
+A aba `DB Resolved`, intervalo `A:M`, usa estes cabeçalhos na linha 1 (a ordem pode mudar; sub_area é opcional e ignorada na interface):
 
 ```text
 year_resolved month_resolved week_resolved cutoff hora_resolucao soc_name
@@ -71,6 +72,8 @@ exception_reason operator fluxo resolved_shipment resolved_bips sub_area before_
 - Cada combinação cutoff + hora + SOC contém o conjunto completo das linhas daquela hora/estação. Dimensões iguais dentro da carga são somadas.
 - Cabeçalhos obrigatórios ausentes/duplicados, contagem vazia, negativa ou fracionária, SOC vazio e data/hora inválida rejeitam a carga inteira. A última carga válida continua disponível.
 - A ausência de registros é exibida como “—”. Um zero explícito é preservado como observação com valor zero.
+- A coluna `sub_area`, se existir na fonte, é metadado opcional de armazenamento e não é usada como motivo da tratativa nem exibida no produto. `exception_reason` é a única origem dos motivos.
+
 - Operadores sem identificação aparecem como “Não informado”; a contagem é por identificador e SOC no recorte, sem deduplicação global de pessoas entre estações.
 
 ## Como o histórico funciona
@@ -100,7 +103,7 @@ node --check static/app.js
 
 Os testes cobrem normalização, contagens, cutoff, ausência versus zero, segurança de sessão/CSRF, validação de filtros e matriz da rede. Os testes de rotas isolam o banco com fixtures. Para validar o armazenamento real, use um PostgreSQL de teste exclusivo e execute `python -m unittest discover -s tests -p test_postgres.py -v` com `TEST_DATABASE_URL` definido. Nunca aponte esse teste ao banco de produção.
 
-O painel foi conferido em navegador com dados demonstrativos, incluindo seleção de SOC, hora, motivo, fluxo, estado vazio e versão móvel. A amostra enviada foi validada localmente sem inclusão no repositório. Login real, coleta autenticada, PostgreSQL do Railway e publicação SeaTalk precisam ser conferidos após configurar os serviços e credenciais.
+A versão inicial foi conferida em navegador com dados demonstrativos. A revisão com abas independentes, Pareto e busca digitável foi verificada por testes de contrato, renderização de templates e sintaxe; a conferência visual no navegador ficou pendente porque a revisão automática bloqueou o acesso por limite de uso. A amostra enviada foi validada localmente sem inclusão no repositório. Login real, coleta autenticada, PostgreSQL do Railway e publicação SeaTalk precisam ser conferidos após configurar os serviços e credenciais.
 
 ## Referências oficiais
 
