@@ -1,4 +1,4 @@
-# Pulso EHA
+# EHA Live
 
 Visão de produção da Exception Handling Area, com **bips como indicador principal**, seleção de estação após o login e matriz de todos os SOCs por hora. Projeto independente do Cockpit, com a mesma prioridade de bips e abertura por motivo.
 
@@ -11,7 +11,7 @@ Visão de produção da Exception Handling Area, com **bips como indicador princ
 - Matriz de todos os SOCs, mesmo quando uma estação está selecionada nos cards.
 - Filtros por cutoff, SOC, fluxo e subárea; atualização da tela a cada minuto.
 - Coletor autenticado de Google Sheets e histórico PostgreSQL com revisões imutáveis.
-- Layout para computador e celular; marca vetorial em `static/logo.svg`.
+- Layout para computador e celular; marca vetorial em `static/brand/eha-live-logo.webp`.
 
 O nome e a identidade são uma proposta inicial. Não são usados dados demonstrativos em produção. A aplicação começa vazia e aguarda a primeira coleta válida.
 
@@ -54,7 +54,7 @@ Gere a chave com `python -c "import secrets; print(secrets.token_hex(32))"`. Cad
 
 ### SeaTalk e área de trabalho
 
-Cadastre um Workspace App com a URL HTTPS do Web como página de entrada e use `static/logo.svg` como referência da marca; exporte PNG caso o portal exija esse formato. Para a opção nativa de login, habilite Login with SeaTalk, configure o retorno `https://SEU-DOMINIO/auth/seatalk/callback` e cadastre o ID e segredo no serviço Web. O botão oficial e a troca de código seguem o contrato usado no Cockpit. O fluxo real depende da configuração do novo aplicativo no portal SeaTalk.
+Cadastre um Workspace App com a URL HTTPS do Web como página de entrada e use `static/brand/eha-live-logo.webp` como referência da marca; exporte PNG caso o portal exija esse formato. Para a opção nativa de login, habilite Login with SeaTalk, configure o retorno `https://SEU-DOMINIO/auth/seatalk/callback` e cadastre o ID e segredo no serviço Web. O botão oficial e a troca de código seguem o contrato usado no Cockpit. O fluxo real depende da configuração do novo aplicativo no portal SeaTalk.
 
 O acesso dos dois provedores é validado no servidor. A configuração inicial permite os domínios corporativos acima em todos os SOCs; seleção de estação é preferência de visualização, **não uma restrição de acesso**. Não há integração automática com o cadastro ou as permissões do banco do Cockpit.
 
