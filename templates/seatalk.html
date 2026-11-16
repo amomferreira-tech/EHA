@@ -1,0 +1,4 @@
+{% extends 'base.html' %}{% block body %}<main class="center"><section class="selection panel"><img class="symbol" src="/static/logo.svg" alt="Pulso EHA"><h1>Entrar com SeaTalk</h1><p>Confirme sua identidade corporativa pelo botão oficial.</p>
+<div id="seatalk_login_app_info" data-redirect_uri="{{ callback_url }}" data-appid="{{ app_id }}" data-response_type="code" data-state="{{ state }}"></div>
+<div id="seatalk_login_button" data-size="large" data-logo_size="28" data-copywriting="Entrar com SeaTalk" data-theme="default" data-align="center"></div>
+<p><a href="/login">Voltar ao login</a></p></section></main><script src="https://static.cdn.haiserve.com/seatalk/client/shared/sop/auth.js" defer></script>{% endblock %}
