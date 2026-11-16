@@ -1,0 +1,27 @@
+// Teste de renderização puro, sem navegador nem rede.
+const assert=require('node:assert/strict');
+const vm=require('node:vm');
+const fs=require('node:fs');
+const path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'../static/app.js'),'utf8');
+const nodes=Object.fromEntries(['search','people-head','people-total','people-list','more'].map(id=>[id,{value:'',innerHTML:'',textContent:'',hidden:false}]));
+const hours=Array(24).fill(0);hours[7]=12;hours[8]=5;
+const reasons=[{name:'Etiqueta',bips:14,shipments:3,hours:hours.map((n,h)=>h===7?9:n)},
+  {name:'Avaria',bips:3,shipments:1,hours:hours.map((n,h)=>h===7?3:0)}];
+const fixture={view:'soc',soc:'SOC A',coverage:[{hour:7},{hour:8}],people:[{name:'Ana',hours,bips:17,shipments:4,shipment_hours:hours,reasons}]};
+const setup=source.slice(0,source.indexOf('async function api'));
+const renderer=source.slice(source.indexOf('function paintPeople(){'),source.indexOf('function paintSoc(data)'));
+const context=vm.createContext({document:{getElementById:id=>nodes[id]},Intl,Set,fixture});
+vm.runInContext(setup+renderer+';current=fixture;paintPeople();',context);
+assert.match(nodes['people-head'].innerHTML,/>07h</);
+assert.ok(nodes['people-head'].innerHTML.indexOf('>07h<')<nodes['people-head'].innerHTML.indexOf('>00h<'));
+assert.match(nodes['people-list'].innerHTML,/TOTAL DO SOC/);
+assert.match(nodes['people-list'].innerHTML,/>12<\/td>/);
+assert.match(nodes['people-list'].innerHTML,/>—<\/td>/);
+vm.runInContext("expandedOperators.add('Ana');paintPeople();",context);
+assert.match(nodes['people-list'].innerHTML,/operator-reason/);
+assert.match(nodes['people-list'].innerHTML,/Etiqueta/);
+assert.match(nodes['people-list'].innerHTML,/Avaria/);
+nodes.search.value='inexistente';vm.runInContext('paintPeople();',context);
+assert.match(nodes['people-list'].innerHTML,/Nenhum operador/);
+console.log('Matriz por operador: horas, totais, ausência, expansão de motivos e busca conferidos.');

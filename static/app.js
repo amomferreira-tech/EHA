@@ -5,11 +5,13 @@ const pct=n=>(n*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short=s=>String(s).replace(/^SoC_/i,'').replaceAll('_',' · ');
 const norm=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replaceAll('_',' ');
-let view='overall',current=null,selectedHour=null,peopleLimit=25,version=0,catalog=null;
+const HOURS=Array.from({length:24},(_,i)=>(i+7)%24);
+let view='overall',current=null,selectedHour=null,peopleLimit=100,version=0,catalog=null,operatorStation='';
+const expandedOperators=new Set();
 async function api(url){const r=await fetch(url);if(r.status===401){location.href='/login';throw Error('Sua sessão expirou.');}const d=await r.json();if(!r.ok)throw Error(d.error||'Não foi possível consultar os dados.');return d;}
 function options(select,values,first){const previous=select.value;select.replaceChildren();for(const [value,label] of [['',first],...values.map(v=>[v,v])]){const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);}select.value=values.includes(previous)?previous:'';select.dispatchEvent(new Event('optionsupdated'));}
 function saveLocation(push=false){const p=new URLSearchParams({view,day:$('day').value});if($('soc').value)p.set('soc',$('soc').value);if(view==='soc'){if($('flow').value)p.set('flow',$('flow').value);if($('reason').value)p.set('reason',$('reason').value);if(selectedHour!==null)p.set('hour',selectedHour);}history[push?'pushState':'replaceState']({},'',location.pathname+'?'+p);}
-function setView(next,push=true){view=next;for(const name of ['overall','soc']){const selected=name===view;$('tab-'+name).setAttribute('aria-selected',String(selected));$('tab-'+name).tabIndex=selected?0:-1;$('view-'+name).hidden=!selected;}for(const id of ['soc-filter','flow-filter','reason-filter'])$(id).hidden=view!=='soc';$('pick-soc').hidden=!!$('soc').value;$('soc-content').hidden=!$('soc').value;peopleLimit=25;current=null;$('error').hidden=true;saveLocation(push);load();}
+function setView(next,push=true){const stationSelected=!!$('soc').value;view=stationSelected?'soc':next;$('view-tabs').hidden=stationSelected;for(const name of ['overall','soc']){const selected=name===view;$('tab-'+name).setAttribute('aria-selected',String(selected));$('tab-'+name).tabIndex=selected?0:-1;$('view-'+name).hidden=!selected;}if(stationSelected){for(const id of ['matrix-head','matrix-body','matrix-foot'])$(id).replaceChildren();$('overall-bips').textContent='—';$('soc-count').textContent='—';}for(const id of ['soc-filter','flow-filter','reason-filter'])$(id).hidden=view!=='soc';$('pick-soc').hidden=stationSelected;$('soc-content').hidden=!stationSelected;peopleLimit=100;current=null;$('error').hidden=true;saveLocation(push);load();}
 function syncStatus(sync){const stamp=sync.last_success?new Date(sync.last_success).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}):'nenhuma coleta';$('sync').textContent=(sync.failed?'Falha na coleta · ':sync.stale?'Atualização pendente · ':'Última coleta · ')+stamp;$('sync').className=sync.failed||sync.stale?'warning':'good';if(sync.failed&&sync.error){$('error').textContent=sync.error;$('error').hidden=false;}}
 function paintNetwork(){
   if(!current||current.view!=='overall')return;
@@ -43,7 +45,26 @@ function paintPareto(rows,total){
 }
 function miniHours(hours){return '<div class="mini-hours">'+hours.map((n,h)=>n>0?`<span><small>${String(h).padStart(2,'0')}h</small><b>${fmt(n)}</b></span>`:'').join('')+'</div>';}
 function paintReasons(rows){$('reason-count').textContent=rows.length+' motivos';$('reason-rows').innerHTML=rows.map(r=>`<tr><td><details class="reason-detail"><summary>${esc(r.name)}</summary><p>${fmt(r.operators)} colaboradores com registro</p>${miniHours(r.hours)}</details></td><td>${fmt(r.bips)}</td><td>${fmt(r.shipments)}</td><td>${pct(r.share)}</td><td>${pct(r.cumulative)}</td></tr>`).join('')||'<tr><td colspan="5">Sem registros neste recorte.</td></tr>';}
-function paintPeople(){if(!current||current.view!=='soc')return;const q=norm($('search').value);const rows=current.people.filter(p=>norm(p.name).includes(q));$('people-list').innerHTML=rows.slice(0,peopleLimit).map((p,i)=>`<details class="person"><summary><span class="rank">${String(i+1).padStart(2,'0')}</span><span class="avatar">${esc(p.name.replace(/^\[[^\]]*\]/,'').trim().slice(0,2).toUpperCase())}</span><span class="person-name"><b>${esc(p.name)}</b><small>${p.reasons.length} motivos de tratativa</small></span><span class="person-total"><b>${fmt(p.bips)}</b><small>bips · ${fmt(p.shipments)} pacotes</small></span></summary><div class="person-detail"><h3>PRODUÇÃO POR HORA</h3>${miniHours(p.hours)}<h3>MOTIVOS DA TRATATIVA</h3>${p.reasons.map(r=>`<div class="detail-reason"><span>${esc(r.name)}</span><b>${fmt(r.bips)} bips</b></div>`).join('')}</div></details>`).join('')||'<p class="no-data">Nenhum colaborador neste recorte.</p>';$('more').hidden=rows.length<=peopleLimit;}
+function paintPeople(){
+  if(!current||current.view!=='soc')return;
+  if(operatorStation!==current.soc){expandedOperators.clear();operatorStation=current.soc;}
+  const q=norm($('search').value),rows=current.people.filter(p=>norm(p.name).includes(q));
+  const observed=new Set(current.coverage.map(r=>r.hour));
+  const visibleHours=selectedHour===null?new Set(HOURS):new Set([selectedHour]);
+  const cell=(hours,h)=>observed.has(h)&&visibleHours.has(h)?fmt(hours[h]||0):'—';
+  $('people-head').innerHTML='<tr><th scope="col">OPERADOR</th><th scope="col">TOTAL BIPS</th>'+HOURS.map(h=>`<th scope="col"><button class="operator-hour" data-hour="${h}" aria-label="Filtrar ${h} horas">${String(h).padStart(2,'0')}h<small>${observed.has(h)?'SALVO':'SEM REGISTRO'}</small></button></th>`).join('')+'</tr>';
+  const totals=Array(24).fill(0);rows.forEach(p=>p.hours.forEach((n,h)=>totals[h]+=n));
+  const bips=rows.reduce((n,p)=>n+p.bips,0),shipments=rows.reduce((n,p)=>n+p.shipments,0);
+  $('people-total').textContent=fmt(bips)+' bips · '+fmt(shipments)+' pacotes';
+  const overall=`<tr class="operator-overall"><td>${q?'TOTAL DO FILTRO':'TOTAL DO SOC'}</td><td>${fmt(bips)}</td>${HOURS.map(h=>`<td>${cell(totals,h)}</td>`).join('')}</tr>`;
+  $('people-list').innerHTML=overall+rows.slice(0,peopleLimit).map(p=>{
+    const expanded=expandedOperators.has(p.name);
+    const main=`<tr class="operator-row"><td><button class="operator-toggle" data-operator="${esc(p.name)}" aria-expanded="${expanded}"><span class="expand-symbol">${expanded?'−':'+'}</span><span>${esc(p.name)}</span></button></td><td class="operator-total"><strong>${fmt(p.bips)}</strong><small>${fmt(p.shipments)} pacotes</small></td>${HOURS.map(h=>`<td title="${h}h · ${observed.has(h)&&visibleHours.has(h)?fmt(p.shipment_hours?.[h]||0)+' pacotes':'sem observação neste recorte'}">${cell(p.hours,h)}</td>`).join('')}</tr>`;
+    const reasons=expanded?p.reasons.map(r=>`<tr class="operator-reason"><td>↳ ${esc(r.name)}</td><td><strong>${fmt(r.bips)}</strong><small>${fmt(r.shipments)} pacotes</small></td>${HOURS.map(h=>`<td>${cell(r.hours,h)}</td>`).join('')}</tr>`).join(''):'';
+    return main+reasons;
+  }).join('')+(rows.length?'':'<tr><td colspan="26" class="no-data">Nenhum operador neste recorte.</td></tr>');
+  $('more').hidden=rows.length<=peopleLimit;
+}
 function paintSoc(data){
   $('soc-content').hidden=false;$('pick-soc').hidden=true;$('soc-title').textContent=short(data.soc);$('scope').textContent=short(data.soc)+' · somente esta estação';
   const period=selectedHour===null?'Dia completo':String(selectedHour).padStart(2,'0')+'h · Hora selecionada';$('detail-period').textContent=period;$('hour-caption').textContent=period;$('bips-caption').textContent=period;
@@ -76,12 +97,14 @@ async function init(){
   }catch(e){$('error').textContent=e.message;$('error').hidden=false;}
 }
 for(const name of ['overall','soc']){$('tab-'+name).addEventListener('click',()=>setView(name));$('tab-'+name).addEventListener('keydown',e=>{if(['ArrowRight','ArrowLeft','Home','End'].includes(e.key)){e.preventDefault();const next=e.key==='Home'?'overall':e.key==='End'?'soc':name==='overall'?'soc':'overall';setView(next);$('tab-'+next).focus();}});}
-for(const id of ['day','soc'])$(id).addEventListener('change',()=>{selectedHour=null;peopleLimit=25;options($('flow'),[],'Todos os fluxos');options($('reason'),[],'Todos os motivos');if(!$('day').value)return;saveLocation();load();});
-for(const id of ['flow','reason'])$(id).addEventListener('change',()=>{peopleLimit=25;saveLocation();load();});
+for(const id of ['day','soc'])$(id).addEventListener('change',()=>{selectedHour=null;peopleLimit=100;options($('flow'),[],'Todos os fluxos');options($('reason'),[],'Todos os motivos');if(id==='soc'){setView($('soc').value?'soc':'overall');return;}if(!$('day').value)return;saveLocation();load();});
+for(const id of ['flow','reason'])$(id).addEventListener('change',()=>{peopleLimit=100;saveLocation();load();});
 $('refresh').addEventListener('click',load);$('network-search').addEventListener('input',paintNetwork);
-$('matrix-body').addEventListener('click',e=>{const b=e.target.closest('[data-soc]');if(b){$('soc').value=b.dataset.soc;$('soc').dispatchEvent(new Event('change'));selectedHour=null;setView('soc');}});
-$('chart').addEventListener('click',e=>{const b=e.target.closest('[data-hour]');if(b){const h=Number(b.dataset.hour);selectedHour=selectedHour===h?null:h;peopleLimit=25;saveLocation();load();}});
+$('matrix-body').addEventListener('click',e=>{const b=e.target.closest('[data-soc]');if(b){$('soc').value=b.dataset.soc;$('soc').dispatchEvent(new Event('change'));}});
+$('chart').addEventListener('click',e=>{const b=e.target.closest('[data-hour]');if(b){const h=Number(b.dataset.hour);selectedHour=selectedHour===h?null:h;peopleLimit=100;saveLocation();load();}});
 $('clear-hour').addEventListener('click',()=>{selectedHour=null;saveLocation();load();});
 $('pareto-key').addEventListener('click',e=>{const b=e.target.closest('[data-reason]');if(b){$('reason').value=b.dataset.reason;saveLocation();load();}});
-$('search').addEventListener('input',()=>{peopleLimit=25;paintPeople();});$('more').addEventListener('click',()=>{peopleLimit+=25;paintPeople();});
+$('people-list').addEventListener('click',e=>{const b=e.target.closest('[data-operator]');if(b){const name=b.dataset.operator;if(expandedOperators.has(name))expandedOperators.delete(name);else expandedOperators.add(name);paintPeople();}});
+$('people-head').addEventListener('click',e=>{const b=e.target.closest('[data-hour]');if(b){const h=Number(b.dataset.hour);selectedHour=selectedHour===h?null:h;saveLocation();load();}});
+$('search').addEventListener('input',()=>{peopleLimit=100;paintPeople();});$('more').addEventListener('click',()=>{peopleLimit+=100;paintPeople();});
 window.addEventListener('popstate',()=>init());setInterval(()=>{if(!document.hidden)load();},60000);init();

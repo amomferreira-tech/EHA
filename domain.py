@@ -89,11 +89,16 @@ def summarize(rows, stations, day, soc='', flow='', hour=None, reason=''):
         matrix[r['soc_name']]['hours'][h] = (matrix[r['soc_name']]['hours'][h] or 0) + b
         opkey = (r['soc_name'], r['operator'])
         op = operators.setdefault(opkey, dict(name=r['operator'] or 'Não informado',
-                    soc=r['soc_name'], bips=0, shipments=0, reasons=defaultdict(int), hours=[0]*24))
+                    soc=r['soc_name'], bips=0, shipments=0, reasons={}, hours=[0]*24,shipment_hours=[0]*24))
         op['bips'] += b
         op['shipments'] += p
         op['hours'][h] += b
-        op['reasons'][r['exception_reason'] or 'Não informado'] += b
+        op['shipment_hours'][h] += p
+        op_reason=op['reasons'].setdefault(r['exception_reason'] or 'Não informado',
+            dict(bips=0,shipments=0,hours=[0]*24))
+        op_reason['bips']+=b
+        op_reason['shipments']+=p
+        op_reason['hours'][h]+=b
         reason_name=r['exception_reason'] or 'Não informado'
         entry=reasons.setdefault(reason_name,dict(name=reason_name,bips=0,shipments=0,hours=[0]*24,operators=set()))
         entry['bips']+=b
@@ -104,7 +109,7 @@ def summarize(rows, stations, day, soc='', flow='', hour=None, reason=''):
         flows[r['fluxo'] or 'Não informado']+=b
     ops = sorted(operators.values(), key=lambda r: (-r['bips'], r['name']))
     for op in ops:
-        op['reasons'] = sorted([dict(name=k, bips=v) for k, v in op['reasons'].items()], key=lambda r: -r['bips'])
+        op['reasons'] = sorted([dict(name=k, **v) for k, v in op['reasons'].items()], key=lambda r: -r['bips'])
     observed = [r for r in series if r['observed']]
     peak = max(observed, key=lambda r: r['bips']) if observed else None
     bips=sum(r['bips'] for r in filtered)

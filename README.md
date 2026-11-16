@@ -4,14 +4,15 @@ Visão de produção da Exception Handling Area, com **bips como indicador princ
 
 ## O que está incluído
 
-- Duas abas independentes no topo: **Visão geral** e **Visão do SOC**, sem navegação lateral por âncoras.
+- Visão geral para a opção Todos os SOCs. Ao escolher uma estação, a aba da rede fica oculta e o painel mostra somente aquele SOC. Use Trocar estação / visão para retornar à seleção.
 - Visão geral dedicada à matriz de bips H/H de todos os SOCs, busca de estação e total da rede.
 - Visão do SOC restrita à estação escolhida: indicadores, gráfico H/H, Pareto, motivos detalhados, fluxos e colaboradores.
 - Pareto por `exception_reason`: barras de bips em ordem decrescente, linha de percentual acumulado e referência de 80%.
 - Filtros por cutoff, estação (com digitação), fluxo, motivo da tratativa e hora. Sem subárea nas telas e filtros.
 - Clique em uma hora para filtrar o detalhe; clique em um motivo do Pareto para abrir seu recorte.
 - Horas preservadas no banco indicadas na estação. A janela de quatro horas da fonte não limita o histórico já coletado.
-- Login corporativo Google e opção Login with SeaTalk em destaque.
+- Login por e-mail corporativo (Google) primeiro; Login with SeaTalk abaixo.
+- Matriz H/H por operador, na ordem 07h–06h, com total de bips, pacotes secundários e abertura dos motivos por hora. A mudança é apenas na ordem de exibição; cutoff não é deslocado.
 - Coletor autenticado de Google Sheets, PostgreSQL com revisões imutáveis e preferência de estação por conta.
 - Layout adaptável para computador e celular; marca Shopito em `static/brand/eha-live-logo.webp`.
 
@@ -103,7 +104,7 @@ node --check static/app.js
 
 Os testes cobrem normalização, contagens, cutoff, ausência versus zero, segurança de sessão/CSRF, validação de filtros e matriz da rede. Os testes de rotas isolam o banco com fixtures. Para validar o armazenamento real, use um PostgreSQL de teste exclusivo e execute `python -m unittest discover -s tests -p test_postgres.py -v` com `TEST_DATABASE_URL` definido. Nunca aponte esse teste ao banco de produção.
 
-A versão inicial foi conferida em navegador com dados demonstrativos. A revisão com abas independentes, Pareto e busca digitável foi verificada por testes de contrato, renderização de templates e sintaxe; a conferência visual no navegador ficou pendente porque a revisão automática bloqueou o acesso por limite de uso. A amostra enviada foi validada localmente sem inclusão no repositório. Login real, coleta autenticada, PostgreSQL do Railway e publicação SeaTalk precisam ser conferidos após configurar os serviços e credenciais.
+A versão inicial foi conferida em navegador com dados demonstrativos. A revisão com abas independentes, Pareto e busca digitável foi verificada por testes de contrato, renderização de templates e sintaxe; a conferência visual da primeira revisão ficou pendente por limite de uso. Após a liberação, a revisão com matriz H/H por operador, busca de estação, isolamento do SOC e ordem dos botões de login foi conferida em navegador com dados demonstrativos. A amostra enviada foi validada localmente sem inclusão no repositório. Login real, coleta autenticada, PostgreSQL do Railway e publicação SeaTalk precisam ser conferidos após configurar os serviços e credenciais.
 
 ## Referências oficiais
 

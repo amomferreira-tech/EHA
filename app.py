@@ -180,7 +180,7 @@ def create_app():
         soc=request.args.get('soc','')
         if soc and soc not in cat['stations']:
             return jsonify(error='Estação inválida.'),400
-        view=request.args.get('view','soc' if soc else 'overall')
+        view='soc' if soc else request.args.get('view','overall')
         if view not in ('soc','overall') or (view=='soc' and not soc):
             return jsonify(error='Escolha uma estação para abrir a visão do SOC.'),400
         if view=='overall':

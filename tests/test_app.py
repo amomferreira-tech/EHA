@@ -57,6 +57,16 @@ class AppTests(unittest.TestCase):
         self.assertEqual([r['name'] for r in result['people']],['Ana'])
         self.assertEqual(result['available_reasons'],['Etiqueta'])
         self.assertFalse(result['sync']['stale'])
+        requested_network=self.client.get('/api/dashboard?view=overall&day=2026-11-16&soc=SOC+A').get_json()
+        self.assertEqual(requested_network['view'],'soc')
+        self.assertEqual([r['soc'] for r in requested_network['matrix']],['SOC A'])
+
+    def test_email_login_comes_before_seatalk(self):
+        with patch.dict(os.environ,SEATALK_APP_ID='fixture-app',SEATALK_APP_SECRET='fixture-secret'):
+            client=create_app().test_client()
+            html=client.get('/login').get_data(as_text=True)
+            self.assertLess(html.index('href="/auth/google"'),html.index('href="/auth/seatalk"'))
+            self.assertIn('Entrar com e-mail corporativo',html)
 
     @patch('store.coverage',return_value=[])
     @patch('store.sync_status',return_value={'last':{'status':'ok'},'last_success':datetime.now(timezone.utc)})

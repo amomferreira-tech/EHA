@@ -71,6 +71,20 @@ class DomainTests(unittest.TestCase):
         self.assertEqual(record['exception_reason'],'Etiqueta')
         self.assertEqual(record['bips'],8)
 
+    def test_operator_hourly_matrix_and_reason_rows_agree(self):
+        buckets=normalize([HEAD,row(hour=7,operator='Ana',reason='Etiqueta',bips=9),
+            row(hour=7,operator='Ana',reason='Avaria',bips=3),row(hour=8,operator='Ana',reason='Etiqueta',bips=5),
+            row(hour=7,operator='Bia',bips=2),row(hour=7,soc='SOC B',operator='Ana',bips=100)])
+        rows=[dict(r,hour=key[1]) for key,records in buckets.items() for r in records]
+        result=summarize(rows,['SOC A','SOC B'],'2026-11-16',soc='SOC A')
+        ana=next(r for r in result['people'] if r['name']=='Ana')
+        self.assertEqual(ana['bips'],17)
+        self.assertEqual(ana['hours'][7:9],[12,5])
+        for h in range(24):
+            self.assertEqual(sum(r['hours'][h] for r in ana['reasons']),ana['hours'][h])
+            self.assertEqual(sum(r['hours'][h] for r in result['people']),result['series'][h]['bips'])
+        self.assertEqual(sum(ana['shipment_hours']),ana['shipments'])
+
     def test_overall_keeps_missing_distinct_from_zero(self):
         result=overall([dict(soc_name='A',hour=2,bips=0)],['A','B'],'2026-11-16')
         station=next(r for r in result['matrix'] if r['soc']=='A')

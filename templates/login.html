@@ -5,8 +5,8 @@
 <small>EXCEPTION HANDLING AREA · VISIBILIDADE OPERACIONAL</small></section>
 <section class="access"><div class="access-box"><span class="tag">BEM-VINDO AO EHA LIVE</span><h2>Sua operação começa aqui.</h2><p>Entre com sua conta corporativa e escolha a estação que deseja acompanhar.</p>
 {% if denied %}<p class="notice error" role="alert">Acesso não autorizado ou sessão de login expirada. Confira sua conta corporativa e tente novamente.</p>{% endif %}
-{% if sea_ready %}<a class="button primary wide" href="/auth/seatalk">Entrar com SeaTalk</a><p class="provider-note">No aplicativo SeaTalk, use esta opção para entrar com sua conta corporativa.</p>{% endif %}
-{% if google_ready %}<a class="button {{ 'secondary' if sea_ready else 'primary' }} wide" href="/auth/google"><span class="google-mark">G</span> Entrar com Google no navegador</a>{% endif %}
+{% if google_ready %}<a class="button primary wide" href="/auth/google"><span class="google-mark">G</span> Entrar com e-mail corporativo</a>{% endif %}
+{% if sea_ready %}<a class="button {{ 'secondary' if google_ready else 'primary' }} wide" href="/auth/seatalk">Entrar com SeaTalk</a><p class="provider-note">No aplicativo SeaTalk, use esta opção para entrar com sua conta corporativa.</p>{% endif %}
 {% if not google_ready and not sea_ready %}<p class="notice">O acesso está aguardando configuração pelo administrador.</p>{% endif %}
 <hr><small>Acesso restrito às contas corporativas autorizadas.<br>Após entrar, selecione seu SOC ou a visão da rede.</small></div></section></main>
 {% endblock %}
