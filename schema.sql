@@ -41,3 +41,18 @@ CREATE TABLE IF NOT EXISTS eha_preferences (
     station TEXT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS eha_unit_settings (
+    soc_name TEXT PRIMARY KEY,
+    shift_starts JSONB NOT NULL CHECK(jsonb_typeof(shift_starts)='array' AND jsonb_array_length(shift_starts)=3),
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_by TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS eha_unit_settings_audit (
+    id BIGSERIAL PRIMARY KEY,
+    soc_name TEXT NOT NULL,
+    shift_starts JSONB NOT NULL,
+    version INTEGER NOT NULL,
+    updated_by TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

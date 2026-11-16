@@ -12,7 +12,8 @@ Visão de produção da Exception Handling Area, com **bips como indicador princ
 - Clique em uma hora para filtrar o detalhe; clique em um motivo do Pareto para abrir seu recorte.
 - Horas preservadas no banco indicadas na estação. A janela de quatro horas da fonte não limita o histórico já coletado.
 - Login por e-mail corporativo (Google) primeiro; Login with SeaTalk abaixo.
-- Matriz H/H por operador, na ordem 07h–06h, com total de bips, pacotes secundários e abertura dos motivos por hora. A mudança é apenas na ordem de exibição; cutoff não é deslocado.
+- Matriz H/H por operador e gráfico na sequência configurada para o SOC: primeira hora do T1 até a última hora do T3. Cutoff não é deslocado.
+- Aba Configurações por unidade, com início de T1, T2 e T3, histórico de alteração, prevenção de sobrescrita concorrente e filtro de produção por turno.
 - Coletor autenticado de Google Sheets, PostgreSQL com revisões imutáveis e preferência de estação por conta.
 - Layout adaptável para computador e celular; marca Shopito em `static/brand/eha-live-logo.webp`.
 
@@ -57,6 +58,18 @@ Gere a chave com `python -c "import secrets; print(secrets.token_hex(32))"`. Cad
 Cadastre um Workspace App com a URL HTTPS do Web como página de entrada e use `static/brand/eha-live-logo.webp` como referência da marca; exporte PNG caso o portal exija esse formato. Para a opção nativa de login, habilite Login with SeaTalk, configure o retorno `https://SEU-DOMINIO/auth/seatalk/callback` e cadastre o ID e segredo no serviço Web. O botão oficial e a troca de código seguem o contrato usado no Cockpit. O fluxo real depende da configuração do novo aplicativo no portal SeaTalk.
 
 O acesso dos dois provedores é validado no servidor. A configuração inicial permite os domínios corporativos acima em todos os SOCs; seleção de estação é preferência de visualização, **não uma restrição de acesso**. Não há integração automática com o cadastro ou as permissões do banco do Cockpit.
+
+## Configurações de turnos por unidade
+
+Abra **Configurações**, escolha o SOC e informe o início de T1, T2 e T3. A base é agregada por hora, portanto são aceitas horas cheias. O fim de cada turno é o início do próximo; o T3 termina no início do T1, formando um ciclo contínuo de 24 horas sem sobreposição. A ordem dos inícios deve seguir T1 → T2 → T3 dentro desse ciclo.
+
+O gráfico, a matriz por operador e a faixa de horas preservadas começam no início do T1 e terminam uma hora antes do seu reinício, após o T3. Exemplos: T1 às 07h resulta em 07h–06h; T1 às 06h resulta em 06h–05h. A configuração de uma unidade não modifica outra.
+
+Sem configuração salva, a ordem de exibição é 07h–06h e os turnos não são presumidos. T2 e T3 ficam em branco no formulário até o usuário informar os horários reais. Não há associação automática entre siglas RJ1/RJ4 e nomes de SOC.
+
+Na Produção, use Dia completo/T1/T2/T3 para filtrar indicadores, Pareto e operadores. O gráfico mantém as 24 horas ordenadas e atenua os outros turnos. A configuração é compartilhada entre as contas autorizadas e aplicada aos dias consultados; as datas, horas e contagens armazenadas não são regravadas. O cutoff da fonte continua sendo o dia operacional de referência.
+
+Os horários são persistidos em `eha_unit_settings`, com versão e conta responsável. Cada gravação gera auditoria em `eha_unit_settings_audit`. O formulário impede que uma versão antiga sobrescreva silenciosamente uma alteração mais recente. As tabelas são criadas automaticamente na inicialização do serviço.
 
 ## Contrato da base
 

@@ -24,4 +24,8 @@ assert.match(nodes['people-list'].innerHTML,/Etiqueta/);
 assert.match(nodes['people-list'].innerHTML,/Avaria/);
 nodes.search.value='inexistente';vm.runInContext('paintPeople();',context);
 assert.match(nodes['people-list'].innerHTML,/Nenhum operador/);
+nodes.search.value='';
+vm.runInContext('HOURS=Array.from({length:24},(_,i)=>(i+6)%24);paintPeople();',context);
+assert.ok(nodes['people-head'].innerHTML.indexOf('>06h<')<nodes['people-head'].innerHTML.indexOf('>07h<'));
+assert.ok(nodes['people-head'].innerHTML.lastIndexOf('>05h<')>nodes['people-head'].innerHTML.lastIndexOf('>23h<'));
 console.log('Matriz por operador: horas, totais, ausência, expansão de motivos e busca conferidos.');

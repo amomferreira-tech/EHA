@@ -4,13 +4,14 @@ import secrets
 import time
 from datetime import date, datetime, timedelta, timezone
 from functools import wraps
-from urllib.parse import urlparse
+from urllib.parse import urlparse,quote
 
 from authlib.integrations.flask_client import OAuth
 from flask import Flask, jsonify, redirect, render_template, request, session, abort
 import store
 import seatalk_login
 from domain import summarize,overall
+from schedules import parse_starts,shift_totals
 
 
 def create_app():
@@ -164,6 +165,34 @@ def create_app():
     def catalog():
         return jsonify(store.catalog())
 
+    @app.route('/settings',methods=['GET','POST'])
+    @protected
+    def settings():
+        stations=store.catalog()['stations']
+        soc=request.form.get('soc','') if request.method=='POST' else request.args.get('soc','')
+        if not soc and session.get('station') in stations:
+            soc=session['station']
+        if soc and soc not in stations:
+            abort(400)
+        definition=store.unit_schedule(soc) if soc else None
+        error=None
+        values=[f'{h:02d}:00' for h in definition['starts']] if definition and definition['configured'] else ['07:00','','']
+        if request.method=='POST':
+            csrf()
+            if not soc:
+                abort(400)
+            values=request.form.getlist('shift_start')
+            try:
+                starts=parse_starts(values)
+                expected=int(request.form.get('version','-1'))
+                store.save_unit_schedule(soc,starts,session['user']['email'],expected)
+                return redirect('/settings?soc='+quote(soc,safe='')+'&saved=1')
+            except ValueError as exc:
+                error=str(exc)
+        return render_template('settings.html',user=session['user'],csrf=session['csrf'],
+            stations=stations,soc=soc,definition=definition,values=values,error=error,
+            saved=request.args.get('saved')=='1'),400 if error else 200
+
     @app.get('/api/dashboard')
     @protected
     def dashboard():
@@ -189,8 +218,17 @@ def create_app():
             rows=store.read_day(day,soc)
             flow=request.args.get('flow','')
             reason=request.args.get('reason','')
-            result=summarize(rows,[soc],day,soc,flow,hour,reason)
+            definition=store.unit_schedule(soc)
+            shift_id=request.args.get('shift','')
+            selected=next((s for s in definition['shifts'] if s['id']==shift_id),None) if shift_id else None
+            if shift_id and not selected:
+                return jsonify(error='Turno não configurado para esta unidade.'),400
+            selected_rows=[r for r in rows if r['hour'] in selected['hours']] if selected else rows
+            result=summarize(selected_rows,[soc],day,soc,flow,hour,reason)
             result['daily_series']=summarize(rows,[soc],day,soc,flow,reason=reason)['series']
+            result['schedule']=definition
+            result['shift']=shift_id
+            result['shift_totals']=shift_totals(rows,soc,definition,flow,reason)
             result['available_reasons']=sorted({r['exception_reason'] or 'Não informado' for r in rows})
             result['available_flows']=sorted({r['fluxo'] for r in rows if r['fluxo']})
             result['soc']=soc

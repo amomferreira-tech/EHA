@@ -5,13 +5,13 @@ const pct=n=>(n*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short=s=>String(s).replace(/^SoC_/i,'').replaceAll('_',' · ');
 const norm=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replaceAll('_',' ');
-const HOURS=Array.from({length:24},(_,i)=>(i+7)%24);
-let view='overall',current=null,selectedHour=null,peopleLimit=100,version=0,catalog=null,operatorStation='';
+let HOURS=Array.from({length:24},(_,i)=>(i+7)%24);
+let view='overall',current=null,selectedHour=null,peopleLimit=100,version=0,catalog=null,operatorStation='',selectedShift='';
 const expandedOperators=new Set();
 async function api(url){const r=await fetch(url);if(r.status===401){location.href='/login';throw Error('Sua sessão expirou.');}const d=await r.json();if(!r.ok)throw Error(d.error||'Não foi possível consultar os dados.');return d;}
 function options(select,values,first){const previous=select.value;select.replaceChildren();for(const [value,label] of [['',first],...values.map(v=>[v,v])]){const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);}select.value=values.includes(previous)?previous:'';select.dispatchEvent(new Event('optionsupdated'));}
-function saveLocation(push=false){const p=new URLSearchParams({view,day:$('day').value});if($('soc').value)p.set('soc',$('soc').value);if(view==='soc'){if($('flow').value)p.set('flow',$('flow').value);if($('reason').value)p.set('reason',$('reason').value);if(selectedHour!==null)p.set('hour',selectedHour);}history[push?'pushState':'replaceState']({},'',location.pathname+'?'+p);}
-function setView(next,push=true){const stationSelected=!!$('soc').value;view=stationSelected?'soc':next;$('view-tabs').hidden=stationSelected;for(const name of ['overall','soc']){const selected=name===view;$('tab-'+name).setAttribute('aria-selected',String(selected));$('tab-'+name).tabIndex=selected?0:-1;$('view-'+name).hidden=!selected;}if(stationSelected){for(const id of ['matrix-head','matrix-body','matrix-foot'])$(id).replaceChildren();$('overall-bips').textContent='—';$('soc-count').textContent='—';}for(const id of ['soc-filter','flow-filter','reason-filter'])$(id).hidden=view!=='soc';$('pick-soc').hidden=stationSelected;$('soc-content').hidden=!stationSelected;peopleLimit=100;current=null;$('error').hidden=true;saveLocation(push);load();}
+function saveLocation(push=false){const p=new URLSearchParams({view,day:$('day').value});if($('soc').value)p.set('soc',$('soc').value);if(view==='soc'){if($('flow').value)p.set('flow',$('flow').value);if($('reason').value)p.set('reason',$('reason').value);if(selectedHour!==null)p.set('hour',selectedHour);if(selectedShift)p.set('shift',selectedShift);}history[push?'pushState':'replaceState']({},'',location.pathname+'?'+p);}
+function setView(next,push=true){const stationSelected=!!$('soc').value;view=stationSelected?'soc':next;$('view-tabs').hidden=stationSelected;$('unit-nav').hidden=!stationSelected;$('settings-link').href='/settings'+(stationSelected?'?soc='+encodeURIComponent($('soc').value):'');$('production-link').href='/?view=soc&soc='+encodeURIComponent($('soc').value);for(const name of ['overall','soc']){const selected=name===view;$('tab-'+name).setAttribute('aria-selected',String(selected));$('tab-'+name).tabIndex=selected?0:-1;$('view-'+name).hidden=!selected;}if(stationSelected){for(const id of ['matrix-head','matrix-body','matrix-foot'])$(id).replaceChildren();$('overall-bips').textContent='—';$('soc-count').textContent='—';}for(const id of ['soc-filter','flow-filter','reason-filter'])$(id).hidden=view!=='soc';$('pick-soc').hidden=stationSelected;$('soc-content').hidden=!stationSelected;peopleLimit=100;current=null;$('error').hidden=true;saveLocation(push);load();}
 function syncStatus(sync){const stamp=sync.last_success?new Date(sync.last_success).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}):'nenhuma coleta';$('sync').textContent=(sync.failed?'Falha na coleta · ':sync.stale?'Atualização pendente · ':'Última coleta · ')+stamp;$('sync').className=sync.failed||sync.stale?'warning':'good';if(sync.failed&&sync.error){$('error').textContent=sync.error;$('error').hidden=false;}}
 function paintNetwork(){
   if(!current||current.view!=='overall')return;
@@ -27,7 +27,8 @@ function paintNetwork(){
 }
 function paintHourChart(series){
   const max=Math.max(1,...series.map(r=>r.bips));
-  $('chart').innerHTML=series.map(r=>`<button class="hour-bar ${r.observed?'':'missing'} ${selectedHour===r.hour?'selected':''}" data-hour="${r.hour}" aria-label="${r.hour} horas: ${r.observed?fmt(r.bips)+' bips':'sem registro'}" aria-pressed="${selectedHour===r.hour}" title="${r.hour}h · ${r.observed?fmt(r.bips)+' bips':'sem registro'}"><b>${r.observed?fmt(r.bips):''}</b><i style="height:${r.observed?Math.max(2,r.bips/max*160):2}px"></i><span>${String(r.hour).padStart(2,'0')}</span></button>`).join('');
+  const byHour=new Map(series.map(r=>[r.hour,r]));const shiftHours=current?.schedule?.shifts.find(s=>s.id===selectedShift)?.hours;const boundaries=new Set(current?.schedule?.shifts.map(s=>s.start)||[]);
+  $('chart').innerHTML=HOURS.map(h=>byHour.get(h)).map(r=>`<button class="hour-bar ${r.observed?'':'missing'} ${selectedHour===r.hour?'selected':''} ${shiftHours&&!shiftHours.includes(r.hour)?'outside-shift':''} ${boundaries.has(r.hour)?'turn-start':''}" data-hour="${r.hour}" aria-label="${r.hour} horas: ${r.observed?fmt(r.bips)+' bips':'sem registro'}" aria-pressed="${selectedHour===r.hour}" title="${r.hour}h · ${r.observed?fmt(r.bips)+' bips':'sem registro'}"><b>${r.observed?fmt(r.bips):''}</b><i style="height:${r.observed?Math.max(2,r.bips/max*160):2}px"></i><span>${String(r.hour).padStart(2,'0')}</span></button>`).join('');
 }
 function paintPareto(rows,total){
   if(!rows.length||!total){$('pareto-chart').innerHTML='<p class="no-data">Sem bips para compor o Pareto neste recorte.</p>';$('pareto-key').replaceChildren();$('pareto-insight').textContent='Sem volume no recorte';return;}
@@ -43,14 +44,15 @@ function paintPareto(rows,total){
   $('pareto-key').innerHTML=rows.map((r,i)=>`<button class="pareto-label" data-reason="${esc(r.name)}" title="Filtrar este motivo"><b>${i+1}</b><span>${esc(r.name)}</span><strong>${pct(r.share)}</strong></button>`).join('');
   const count=rows.findIndex(r=>r.cumulative>=.8)+1;$('pareto-insight').textContent=`${count} ${count===1?'motivo concentra':'motivos concentram'} ${pct(rows[count-1].cumulative)} dos bips`;
 }
-function miniHours(hours){return '<div class="mini-hours">'+hours.map((n,h)=>n>0?`<span><small>${String(h).padStart(2,'0')}h</small><b>${fmt(n)}</b></span>`:'').join('')+'</div>';}
+function miniHours(hours){return '<div class="mini-hours">'+HOURS.map(h=>({h,n:hours[h]})).map(({n,h})=>n>0?`<span><small>${String(h).padStart(2,'0')}h</small><b>${fmt(n)}</b></span>`:'').join('')+'</div>';}
 function paintReasons(rows){$('reason-count').textContent=rows.length+' motivos';$('reason-rows').innerHTML=rows.map(r=>`<tr><td><details class="reason-detail"><summary>${esc(r.name)}</summary><p>${fmt(r.operators)} colaboradores com registro</p>${miniHours(r.hours)}</details></td><td>${fmt(r.bips)}</td><td>${fmt(r.shipments)}</td><td>${pct(r.share)}</td><td>${pct(r.cumulative)}</td></tr>`).join('')||'<tr><td colspan="5">Sem registros neste recorte.</td></tr>';}
 function paintPeople(){
   if(!current||current.view!=='soc')return;
   if(operatorStation!==current.soc){expandedOperators.clear();operatorStation=current.soc;}
   const q=norm($('search').value),rows=current.people.filter(p=>norm(p.name).includes(q));
   const observed=new Set(current.coverage.map(r=>r.hour));
-  const visibleHours=selectedHour===null?new Set(HOURS):new Set([selectedHour]);
+  const shiftHours=current.schedule?.shifts.find(s=>s.id===selectedShift)?.hours||HOURS;
+  const visibleHours=new Set(shiftHours.filter(h=>selectedHour===null||h===selectedHour));
   const cell=(hours,h)=>observed.has(h)&&visibleHours.has(h)?fmt(hours[h]||0):'—';
   $('people-head').innerHTML='<tr><th scope="col">OPERADOR</th><th scope="col">TOTAL BIPS</th>'+HOURS.map(h=>`<th scope="col"><button class="operator-hour" data-hour="${h}" aria-label="Filtrar ${h} horas">${String(h).padStart(2,'0')}h<small>${observed.has(h)?'SALVO':'SEM REGISTRO'}</small></button></th>`).join('')+'</tr>';
   const totals=Array(24).fill(0);rows.forEach(p=>p.hours.forEach((n,h)=>totals[h]+=n));
@@ -65,22 +67,32 @@ function paintPeople(){
   }).join('')+(rows.length?'':'<tr><td colspan="26" class="no-data">Nenhum operador neste recorte.</td></tr>');
   $('more').hidden=rows.length<=peopleLimit;
 }
+function paintShiftControls(data){
+  const definition=data.schedule,first=definition.hour_order[0],last=definition.hour_order[23];
+  const hh=h=>String(h).padStart(2,'0')+'h';
+  $('hour-range').textContent=hh(first)+' → '+hh(last)+(definition.configured?' · Do início do T1 à última hora do T3':' · Ordem padrão, configure os turnos da unidade');
+  $('schedule-note').hidden=definition.configured;
+  $('schedule-note').innerHTML='Horários ainda não definidos para este SOC. <a href="/settings?soc='+encodeURIComponent(data.soc)+'">Configurar T1, T2 e T3</a>.';
+  $('shift-tabs').innerHTML=definition.configured?`<button data-shift="" aria-pressed="${!selectedShift}">Dia completo<small>${hh(first)} → ${hh(last)}</small></button>`+definition.shifts.map(s=>`<button data-shift="${s.id}" aria-pressed="${selectedShift===s.id}">${s.name}<small>${hh(s.start)}–${hh(s.end)}</small></button>`).join(''):'';
+  $('shift-summary').innerHTML=data.shift_totals.map(s=>`<div><b>${s.name} · ${hh(s.start)}–${hh(s.end)}</b><strong>${fmt(s.bips)} bips</strong><span>${fmt(s.shipments)} pacotes · ${s.observed_hours}/${s.hours.length} horas com registro</span></div>`).join('');
+}
 function paintSoc(data){
+  HOURS=data.schedule.hour_order;selectedShift=data.shift||'';paintShiftControls(data);
   $('soc-content').hidden=false;$('pick-soc').hidden=true;$('soc-title').textContent=short(data.soc);$('scope').textContent=short(data.soc)+' · somente esta estação';
-  const period=selectedHour===null?'Dia completo':String(selectedHour).padStart(2,'0')+'h · Hora selecionada';$('detail-period').textContent=period;$('hour-caption').textContent=period;$('bips-caption').textContent=period;
+  const period=selectedHour===null?(selectedShift?selectedShift.toUpperCase()+' · Turno selecionado':'Dia completo'):String(selectedHour).padStart(2,'0')+'h · Hora selecionada';$('detail-period').textContent=period;$('hour-caption').textContent=period;$('bips-caption').textContent=period;
   $('bips').textContent=fmt(data.bips);$('shipments').textContent=fmt(data.shipments);$('operators').textContent=fmt(data.operators);$('saved-hours').textContent=data.coverage.length+'/24';$('saved-range').textContent=data.coverage.length?'Do dia operacional selecionado':'Aguardando a primeira observação';$('empty').hidden=data.series.some(r=>r.observed);$('clear-hour').hidden=selectedHour===null;
   options($('flow'),data.available_flows,'Todos os fluxos');options($('reason'),data.available_reasons,'Todos os motivos');
   paintHourChart(data.daily_series);paintPareto(data.reasons,data.bips);paintReasons(data.reasons);paintPeople();
   $('flows').innerHTML=data.flows.map(r=>`<div class="reason"><div class="reason-line"><span>${esc(r.name)}</span><b>${fmt(r.bips)} · ${pct(data.bips?r.bips/data.bips:0)}</b></div><div class="track"><i style="width:${data.bips?r.bips/data.bips*100:0}%"></i></div></div>`).join('')||'<p class="no-data">Sem fluxo registrado.</p>';
   $('flow-summary').textContent=`${fmt(data.bips)} bips · ${fmt(data.shipments)} pacotes no recorte`;
-  const coverage=new Map(data.coverage.map(r=>[r.hour,r]));$('coverage').innerHTML=Array.from({length:24},(_,h)=>`<span class="${coverage.has(h)?'saved':''}" title="${coverage.has(h)?'Hora preservada. Última observação: '+new Date(coverage.get(h).last_seen).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'Sem observação salva'}">${String(h).padStart(2,'0')}h</span>`).join('');
+  const coverage=new Map(data.coverage.map(r=>[r.hour,r]));$('coverage').innerHTML=HOURS.map(h=>`<span class="${coverage.has(h)?'saved':''}" title="${coverage.has(h)?'Hora preservada. Última observação: '+new Date(coverage.get(h).last_seen).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'Sem observação salva'}">${String(h).padStart(2,'0')}h</span>`).join('');
 }
 async function load(){
   const requestVersion=++version;if(!$('day').value)return;
   if(view==='soc'&&!$('soc').value){$('scope').textContent='Escolha uma estação';$('sync').textContent='Aguardando seleção do SOC';$('pick-soc').hidden=false;$('soc-content').hidden=true;$('refresh').disabled=false;return;}
   $('refresh').disabled=true;$('error').hidden=true;$('sync').textContent='Atualizando o recorte…';
   if(view==='soc'){$('soc-content').hidden=true;$('pick-soc').hidden=true;}
-  const p=new URLSearchParams({view,day:$('day').value});if(view==='soc'){p.set('soc',$('soc').value);p.set('flow',$('flow').value);p.set('reason',$('reason').value);if(selectedHour!==null)p.set('hour',selectedHour);}
+  const p=new URLSearchParams({view,day:$('day').value});if(view==='soc'){p.set('soc',$('soc').value);p.set('flow',$('flow').value);p.set('reason',$('reason').value);if(selectedHour!==null)p.set('hour',selectedHour);if(selectedShift)p.set('shift',selectedShift);}
   try{const data=await api('/api/dashboard?'+p);if(requestVersion!==version)return;current=data;syncStatus(data.sync);if(view==='overall'){$('scope').textContent='Todos os SOCs · Processado H/H';paintNetwork();}else paintSoc(data);}
   catch(e){if(requestVersion!==version)return;current=null;$('error').textContent=e.message;$('error').hidden=false;$('sync').textContent='Atualização não concluída';if(view==='soc'){$('soc-content').hidden=true;$('pick-soc').hidden=false;}}
   finally{if(requestVersion===version)$('refresh').disabled=false;}
@@ -92,19 +104,20 @@ async function init(){
     // Os filtros de motivo e fluxo são sempre derivados apenas da estação escolhida.
     if(p.get('flow'))options($('flow'),[p.get('flow')],'Todos os fluxos');$('flow').value=p.get('flow')||'';
     if(p.get('reason'))options($('reason'),[p.get('reason')],'Todos os motivos');$('reason').value=p.get('reason')||'';
-    const h=p.get('hour');selectedHour=h!==null&&/^\d+$/.test(h)&&Number(h)<24?Number(h):null;
+    selectedShift=p.get('shift')||'';const h=p.get('hour');selectedHour=h!==null&&/^\d+$/.test(h)&&Number(h)<24?Number(h):null;
     view=p.get('view')==='overall'?'overall':p.get('view')==='soc'?'soc':$('soc').value?'soc':'overall';setView(view,false);
   }catch(e){$('error').textContent=e.message;$('error').hidden=false;}
 }
 for(const name of ['overall','soc']){$('tab-'+name).addEventListener('click',()=>setView(name));$('tab-'+name).addEventListener('keydown',e=>{if(['ArrowRight','ArrowLeft','Home','End'].includes(e.key)){e.preventDefault();const next=e.key==='Home'?'overall':e.key==='End'?'soc':name==='overall'?'soc':'overall';setView(next);$('tab-'+next).focus();}});}
-for(const id of ['day','soc'])$(id).addEventListener('change',()=>{selectedHour=null;peopleLimit=100;options($('flow'),[],'Todos os fluxos');options($('reason'),[],'Todos os motivos');if(id==='soc'){setView($('soc').value?'soc':'overall');return;}if(!$('day').value)return;saveLocation();load();});
+for(const id of ['day','soc'])$(id).addEventListener('change',()=>{selectedHour=null;selectedShift='';peopleLimit=100;options($('flow'),[],'Todos os fluxos');options($('reason'),[],'Todos os motivos');if(id==='soc'){setView($('soc').value?'soc':'overall');return;}if(!$('day').value)return;saveLocation();load();});
 for(const id of ['flow','reason'])$(id).addEventListener('change',()=>{peopleLimit=100;saveLocation();load();});
+$('shift-tabs').addEventListener('click',e=>{const button=e.target.closest('[data-shift]');if(button){selectedShift=button.dataset.shift;selectedHour=null;peopleLimit=100;saveLocation();load();}});
 $('refresh').addEventListener('click',load);$('network-search').addEventListener('input',paintNetwork);
 $('matrix-body').addEventListener('click',e=>{const b=e.target.closest('[data-soc]');if(b){$('soc').value=b.dataset.soc;$('soc').dispatchEvent(new Event('change'));}});
-$('chart').addEventListener('click',e=>{const b=e.target.closest('[data-hour]');if(b){const h=Number(b.dataset.hour);selectedHour=selectedHour===h?null:h;peopleLimit=100;saveLocation();load();}});
+$('chart').addEventListener('click',e=>{const b=e.target.closest('[data-hour]');if(b){const h=Number(b.dataset.hour);selectedShift='';selectedHour=selectedHour===h?null:h;peopleLimit=100;saveLocation();load();}});
 $('clear-hour').addEventListener('click',()=>{selectedHour=null;saveLocation();load();});
 $('pareto-key').addEventListener('click',e=>{const b=e.target.closest('[data-reason]');if(b){$('reason').value=b.dataset.reason;saveLocation();load();}});
 $('people-list').addEventListener('click',e=>{const b=e.target.closest('[data-operator]');if(b){const name=b.dataset.operator;if(expandedOperators.has(name))expandedOperators.delete(name);else expandedOperators.add(name);paintPeople();}});
-$('people-head').addEventListener('click',e=>{const b=e.target.closest('[data-hour]');if(b){const h=Number(b.dataset.hour);selectedHour=selectedHour===h?null:h;saveLocation();load();}});
+$('people-head').addEventListener('click',e=>{const b=e.target.closest('[data-hour]');if(b){const h=Number(b.dataset.hour);selectedShift='';selectedHour=selectedHour===h?null:h;saveLocation();load();}});
 $('search').addEventListener('input',()=>{peopleLimit=100;paintPeople();});$('more').addEventListener('click',()=>{peopleLimit+=100;paintPeople();});
 window.addEventListener('popstate',()=>init());setInterval(()=>{if(!document.hidden)load();},60000);init();

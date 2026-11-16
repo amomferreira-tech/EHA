@@ -3,6 +3,8 @@ import os
 import psycopg
 from psycopg.rows import dict_row
 from domain import DIMS, fingerprint
+from psycopg.types.json import Jsonb
+from schedules import schedule,validate_starts
 
 
 def connection():
@@ -83,3 +85,28 @@ def preference(email, station=None):
             return station
         row = conn.execute('SELECT station FROM eha_preferences WHERE email=%s', (email,)).fetchone()
         return row['station'] if row else None
+
+
+def unit_schedule(soc):
+    with connection() as conn:
+        row=conn.execute('SELECT * FROM eha_unit_settings WHERE soc_name=%s',(soc,)).fetchone()
+    if not row:
+        return schedule()
+    return schedule(row['shift_starts'],True,row['version'],row['updated_by'],row['updated_at'].isoformat())
+
+
+def save_unit_schedule(soc,starts,actor,expected_version):
+    validate_starts(starts)
+    with connection() as conn:
+        conn.execute('SELECT pg_advisory_xact_lock(8520983,hashtext(%s))',(soc,))
+        previous=conn.execute('SELECT version FROM eha_unit_settings WHERE soc_name=%s',(soc,)).fetchone()
+        version=previous['version'] if previous else 0
+        if version!=expected_version:
+            raise ValueError('Esta unidade foi atualizada por outra pessoa. Reabra as configurações antes de salvar.')
+        version+=1
+        conn.execute('''INSERT INTO eha_unit_settings(soc_name,shift_starts,version,updated_by)
+            VALUES(%s,%s,%s,%s) ON CONFLICT(soc_name) DO UPDATE SET shift_starts=EXCLUDED.shift_starts,
+            version=EXCLUDED.version,updated_by=EXCLUDED.updated_by,updated_at=now()''',
+            (soc,Jsonb(starts),version,actor))
+        conn.execute('''INSERT INTO eha_unit_settings_audit(soc_name,shift_starts,version,updated_by)
+            VALUES(%s,%s,%s,%s)''',(soc,Jsonb(starts),version,actor))

@@ -8,6 +8,7 @@ os.environ['SECRET_KEY']='test-key-'*8
 os.environ['GOOGLE_CLIENT_ID']='test-client'
 os.environ['GOOGLE_CLIENT_SECRET']='test-secret'
 from app import create_app
+from schedules import schedule
 
 
 class AppTests(unittest.TestCase):
@@ -15,6 +16,9 @@ class AppTests(unittest.TestCase):
         self.app=create_app()
         self.app.config['TESTING']=True
         self.client=self.app.test_client()
+        schedule_mock=patch('store.unit_schedule',return_value=schedule())
+        schedule_mock.start()
+        self.addCleanup(schedule_mock.stop)
 
     def enter(self,email='test@shopee.com',hd='shopee.com',verified=True):
         with self.client.session_transaction() as session:
@@ -92,6 +96,43 @@ class AppTests(unittest.TestCase):
         self.assertIn('data-searchable id="soc"',text)
         self.assertNotIn('sidebar',text)
         self.assertNotIn('subarea',text.lower())
+
+    @patch('store.catalog',return_value={'stations':['SOC A','SOC B']})
+    @patch('store.save_unit_schedule')
+    def test_settings_are_per_station_and_require_csrf(self,save,cat):
+        self.enter()
+        self.assertEqual(self.client.get('/settings?soc=SOC+A').status_code,200)
+        self.assertEqual(self.client.post('/settings',data={'soc':'SOC A','shift_start':['06:00','14:00','22:00']}).status_code,400)
+        response=self.client.post('/settings',data={'soc':'SOC A','csrf':'test-csrf','version':'0',
+            'shift_start':['06:00','14:00','22:00']})
+        self.assertEqual(response.status_code,302)
+        save.assert_called_once_with('SOC A',[6,14,22],'test@shopee.com',0)
+
+    @patch('store.catalog',return_value={'stations':['SOC A']})
+    @patch('store.save_unit_schedule')
+    def test_settings_reject_invalid_turns(self,save,cat):
+        self.enter()
+        response=self.client.post('/settings',data={'soc':'SOC A','csrf':'test-csrf','version':'0',
+            'shift_start':['06:00','06:00','22:00']})
+        self.assertEqual(response.status_code,400)
+        save.assert_not_called()
+        self.assertEqual(self.client.get('/settings?soc=BAD').status_code,400)
+
+    @patch('store.coverage',return_value=[])
+    @patch('store.sync_status',return_value={'last':{'status':'ok'},'last_success':datetime.now(timezone.utc)})
+    @patch('store.read_day',return_value=[dict(soc_name='SOC A',hour=h,operator='Ana',bips=10,shipments=4,
+        fluxo='FWD',exception_reason='Etiqueta') for h in (6,13,14,21,22,5)])
+    @patch('store.catalog',return_value={'stations':['SOC A']})
+    def test_turn_filter_and_graph_order(self,*mocks):
+        self.enter()
+        with patch('store.unit_schedule',return_value=schedule([6,14,22],True)):
+            data=self.client.get('/api/dashboard?day=2026-11-16&soc=SOC+A&shift=t3').get_json()
+            self.assertEqual(data['bips'],20)
+            self.assertEqual(data['schedule']['hour_order'][0],6)
+            self.assertEqual(data['schedule']['hour_order'][-1],5)
+            self.assertEqual([s['bips'] for s in data['shift_totals']],[20,20,20])
+            self.assertEqual(sum(h['bips'] for h in data['daily_series']),60)
+            self.assertEqual(self.client.get('/api/dashboard?day=2026-11-16&soc=SOC+A&shift=t4').status_code,400)
 
     def test_bad_date_and_hour(self):
         self.enter()
