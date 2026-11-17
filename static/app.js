@@ -25,7 +25,7 @@ function paintNetwork(){
   $('matrix-body').innerHTML=rows.map(r=>`<tr><td><button class="soc-link" data-soc="${esc(r.soc)}">${esc(short(r.soc))}<span>Ver detalhe ↗</span></button></td><td>${r.hours.some(n=>n!==null)?fmt(r.bips):'—'}</td>${NETWORK_HOURS.map(h=>{const n=r.hours[h];return `<td ${n===null?'':`style="background:rgba(238,77,45,${.025+.2*n/max})"`}>${n===null?'—':fmt(n)}</td>`;}).join('')}</tr>`).join('');
   const total=rows.reduce((n,r)=>n+r.bips,0);
   const hours=NETWORK_HOURS.map(h=>{const values=rows.map(r=>r.hours[h]).filter(n=>n!==null);return values.length?fmt(values.reduce((a,b)=>a+b,0)):'—';});
-  $('matrix-foot').innerHTML=rows.length?`<tr><td>${q?'TOTAL DO FILTRO':'TOTAL DA REDE'}</td><td>${fmt(total)}</td>${hours.map(v=>`<td>${v}</td>`).join('')}</tr>`:'';
+  $('matrix-foot').innerHTML=rows.length?`<tr><td>${q?'TOTAL DO FILTRO':'TOTAL GERAL'}</td><td>${fmt(total)}</td>${hours.map(v=>`<td>${v}</td>`).join('')}</tr>`:'';
   $('network-empty').hidden=rows.length>0;$('network-empty').textContent=q?'Nenhuma estação encontrada.':'Nenhum SOC foi encontrado no histórico.';
 }
 function paintHourChart(series){
