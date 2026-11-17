@@ -94,7 +94,8 @@ class AppTests(unittest.TestCase):
         text=self.client.get('/').get_data(as_text=True)
         self.assertIn('role="tabpanel"',text)
         self.assertIn('data-searchable id="soc"',text)
-        self.assertNotIn('sidebar',text)
+        self.assertIn('id="app-sidebar"',text)
+        self.assertIn('href="/about"',text)
         self.assertNotIn('subarea',text.lower())
 
     @patch('store.catalog',return_value={'stations':['SOC A','SOC B']})
@@ -138,6 +139,46 @@ class AppTests(unittest.TestCase):
         self.enter()
         for query in ('day=bad','day=2026-11-16&hour=24','day=2026-11-16&hour=x'):
             self.assertEqual(self.client.get('/api/dashboard?'+query).status_code,400)
+
+    def test_anonymous_api_does_not_erase_pending_oauth(self):
+        with self.client.session_transaction() as session:
+            session['_state_google_pending']={'nonce':'pending-nonce'}
+        self.assertEqual(self.client.get('/api/catalog').status_code,401)
+        with self.client.session_transaction() as session:
+            self.assertEqual(session['_state_google_pending']['nonce'],'pending-nonce')
+
+    def test_about_requires_login_and_identifies_owner(self):
+        self.assertEqual(self.client.get('/about').status_code,302)
+        self.enter()
+        response=self.client.get('/about')
+        self.assertEqual(response.status_code,200)
+        self.assertIn('Amom Ferreira de Paula',response.get_data(as_text=True))
+        self.assertIn('mailto:amom.ferreira@shopee.com',response.get_data(as_text=True))
+
+    def test_seatalk_native_requires_origin_challenge_and_verified_profile(self):
+        profile={'provider':'seatalk','identity_verified':True,'sub':'seatalk:verified',
+                 'email':'test@shopee.com','name':'Teste'}
+        with patch.dict(os.environ,SEATALK_APP_ID='fixture-app',SEATALK_APP_SECRET='fixture-secret'):
+            client=create_app().test_client()
+            challenge=client.get('/auth/seatalk/native/challenge').get_json()['state']
+            with patch('seatalk_login.employee_from_sso',return_value=profile) as verify:
+                payload={'state':challenge,'token':'fixture-temporary-token'}
+                self.assertEqual(client.post('/auth/seatalk/native',json=payload).status_code,400)
+                response=client.post('/auth/seatalk/native',json=payload,headers={'Origin':'https://eha.example.test'})
+                self.assertEqual(response.status_code,200)
+                self.assertEqual(response.get_json()['redirect'],'/station')
+                verify.assert_called_once_with('fixture-temporary-token')
+                self.assertEqual(client.post('/auth/seatalk/native',json=payload,headers={'Origin':'https://eha.example.test'}).status_code,400)
+
+    def test_seatalk_internal_login_does_not_show_google_outbound_link(self):
+        with patch.dict(os.environ,SEATALK_APP_ID='fixture-app',SEATALK_APP_SECRET='fixture-secret'):
+            client=create_app().test_client()
+            native=client.get('/login',headers={'User-Agent':'Mozilla/5.0 SeaTalk/2.0'}).get_data(as_text=True)
+            self.assertIn('data-seatalk-native',native)
+            self.assertIn('Abrir no navegador',native)
+            self.assertNotIn('href="/auth/google"',native)
+            browser=client.get('/login?browser=1',headers={'User-Agent':'Mozilla/5.0 SeaTalk/2.0'}).get_data(as_text=True)
+            self.assertIn('href="/auth/google"',browser)
 
     def test_logout_csrf_and_seatalk_state(self):
         self.enter()

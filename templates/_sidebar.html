@@ -1,0 +1,13 @@
+<button class="menu-toggle" type="button" aria-expanded="false" aria-controls="app-sidebar" aria-label="Abrir menu">☰ <span>EHA Live</span></button>
+<button class="menu-shade" type="button" aria-label="Fechar menu" hidden></button>
+<aside class="app-sidebar" id="app-sidebar" aria-label="Menu principal">
+  <a class="sidebar-brand" href="/network"><img src="/static/brand/eha-live-logo.webp" alt="EHA Live · Shopito"></a>
+  <p class="sidebar-label">ACOMPANHAMENTO</p>
+  <nav class="sidebar-links">
+    <a href="/network" data-side-view="overall" class="{{ 'active' if shell_page=='overall' else '' }}" {% if shell_page=='overall' %}aria-current="page"{% endif %}><span aria-hidden="true">▦</span><div>Visão geral<small>Processado H/H dos SOCs</small></div></a>
+    <a href="/soc{% if shell_soc %}?soc={{ shell_soc|urlencode }}{% endif %}" data-side-view="soc" class="{{ 'active' if shell_page=='soc' else '' }}" {% if shell_page=='soc' %}aria-current="page"{% endif %}><span aria-hidden="true">▥</span><div>Visão da unidade<small>Operadores e tratativas</small></div></a>
+    <a data-side-settings href="/settings{% if shell_soc %}?soc={{ shell_soc|urlencode }}{% endif %}" class="{{ 'active' if shell_page=='settings' else '' }}" {% if shell_page=='settings' %}aria-current="page"{% endif %}><span aria-hidden="true">⚙</span><div>Configurações<small>Turnos de cada unidade</small></div></a>
+    <a href="/about" class="{{ 'active' if shell_page=='about' else '' }}" {% if shell_page=='about' %}aria-current="page"{% endif %}><span aria-hidden="true">ⓘ</span><div>Sobre<small>Conheça o EHA Live</small></div></a>
+  </nav>
+  <div class="sidebar-bottom"><button type="button" class="sidebar-browser" data-seatalk-browser hidden>Abrir no navegador ↗</button><p id="seatalk-browser-status" role="status" hidden></p><a class="sidebar-owner" href="/about"><img src="/static/brand/responsavel-amom.jpeg" alt=""><span>Responsável<strong>Amom Ferreira de Paula</strong></span></a><span class="sidebar-history">● Histórico conectado</span></div>
+</aside>

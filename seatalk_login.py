@@ -40,7 +40,22 @@ def employee_from_code(code):
     data = response.json()
     if not isinstance(data, dict) or data.get("code") != 0:
         raise ValueError("Código de autorização SeaTalk inválido ou expirado.")
-    profile = data.get("employee")
+    return verified_employee(data.get('employee'))
+
+
+def employee_from_sso(token):
+    """O servidor oficial valida o token temporário fornecido pelo Web SDK."""
+    response=requests.post('https://openapi.seatalk.io/sso/v2/verify',
+        json={'token':token},headers={'Authorization':'Bearer '+app_token()},
+        timeout=(5,20),allow_redirects=False)
+    response.raise_for_status()
+    data=response.json()
+    if not isinstance(data,dict) or data.get('code')!=0:
+        raise ValueError('O SeaTalk não validou a autorização interna.')
+    return verified_employee(data.get('profile'))
+
+
+def verified_employee(profile):
     if not isinstance(profile, dict) or not profile.get("employee_code") or not profile.get("email"):
         raise ValueError("O SeaTalk não forneceu o e-mail corporativo necessário para autorizar o acesso.")
     # Avatar, celular e outros dados desnecessários não são armazenados na sessão.

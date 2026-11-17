@@ -127,3 +127,13 @@ A versão inicial foi conferida em navegador com dados demonstrativos. A revisã
 - [Google Sheets: leitura de valores](https://developers.google.com/workspace/sheets/api/guides/values)
 - [Google: conta de serviço e compartilhamento](https://developers.google.com/workspace/guides/create-credentials)
 - [SeaTalk: Workspace Apps e Login](https://seatalk.io/features/open)
+
+## Entrada nativa e navegação
+
+Dentro do SeaTalk, o login usa o Web SDK 1.5.0 (`getSSOToken`) e valida o token no servidor oficial (`POST /sso/v2/verify`), seguindo o fluxo do Cockpit. Não aceita email, nome ou identidade fornecidos pelo navegador como autenticação. O desafio dura cinco minutos, é vinculado à sessão e consumido uma vez; o POST exige JSON e Origin igual a APP_BASE_URL. O botão Abrir no navegador usa `openInExternalBrowser` para abrir /login?browser=1, sem transportar tokens nem sessão.
+
+A entrada Google preserva state/nonce de tentativas em andamento. Se o navegador perder a sessão na primeira passagem, uma nova autorização completa é iniciada uma única vez. Callbacks recém-concluídos são idempotentes, com hash do state na sessão; a validação de state, nonce, domínio e identidade continua obrigatória.
+
+Menu lateral com páginas independentes: /network, /soc, /settings e /about. A página Sobre identifica Amom dos Santos Ferreira de Paula, Associate Junior, SOC-RJ4, com foto fornecida pelo responsável e contato corporativo. Em telas pequenas, o menu abre pelo botão superior. Não são necessárias novas variáveis; o aplicativo SeaTalk precisa das permissões de Workspace/SSO aprovadas para as contas que vão acessar.
+
+Esta alteração foi preparada sem testes de execução, conferência no navegador ou prints, conforme solicitado. O fluxo real depende da aprovação/configuração do aplicativo no portal SeaTalk.

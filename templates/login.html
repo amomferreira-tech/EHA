@@ -1,12 +1,17 @@
-{% extends 'base.html' %}{% block body %}
+{% extends 'base.html' %}{% block head %}{% if sea_ready %}<script src="/static/seatalk-native.js?v=1" defer></script>{% endif %}{% endblock %}{% block body %}
+{% if seatalk_native_view and sea_ready %}
+<main class="sea-welcome" data-state="loading"><section class="sea-welcome-card"><img class="sea-welcome-brand" src="/static/brand/eha-live-logo.webp" alt="EHA Live · Shopito"><span class="eyebrow">SUA OPERAÇÃO CONECTADA</span><h1>Preparando sua operação…</h1><span class="sea-loading-ring" aria-hidden="true"></span><p id="seatalk-native-status" class="sea-welcome-status" role="status" aria-live="polite">Entrando com sua conta do SeaTalk…</p>{% if denied %}<p data-login-denied role="alert">Sua conta não tem acesso ao EHA Live. Use sua conta corporativa autorizada.</p>{% endif %}{% if auth_error %}<p role="alert">{{ auth_error }}</p>{% endif %}<div class="sea-welcome-actions"><button type="button" data-seatalk-native hidden>Tentar novamente</button><button type="button" data-seatalk-browser hidden>Abrir no navegador ↗</button></div><p class="sea-browser-note">O EHA Live identifica sua conta corporativa dentro do SeaTalk. Se preferir, use o navegador.</p><p id="seatalk-browser-status" role="status" hidden></p><noscript>Ative o JavaScript para entrar pelo SeaTalk.</noscript></section></main>
+{% else %}
 <main class="entrance"><section class="story"><a class="brand" href="/login"><img class="brand-wordmark" src="/static/brand/eha-live-logo.webp" alt="EHA Live · Shopito"></a>
 <div class="hero-message"><span class="eyebrow">CADA BIPE CONTA</span><h1>Sua operação ao vivo.<br>Cada estação conectada.</h1><p>Produção hora a hora, pessoas e resultados em uma visão feita para o dia a dia da EHA.</p>
 <div class="hero-features"><span>Bips hora a hora</span><span>Todos os SOCs</span><span>Histórico conectado</span></div></div>
 <small>EXCEPTION HANDLING AREA · VISIBILIDADE OPERACIONAL</small></section>
 <section class="access"><div class="access-box"><span class="tag">BEM-VINDO AO EHA LIVE</span><h2>Sua operação começa aqui.</h2><p>Entre com sua conta corporativa e escolha a estação que deseja acompanhar.</p>
 {% if denied %}<p class="notice error" role="alert">Acesso não autorizado ou sessão de login expirada. Confira sua conta corporativa e tente novamente.</p>{% endif %}
+{% if auth_error %}<p class="notice error" role="alert">{{ auth_error }}</p>{% endif %}
 {% if google_ready %}<a class="button primary wide" href="/auth/google"><span class="google-mark">G</span> Entrar com e-mail corporativo</a>{% endif %}
-{% if sea_ready %}<a class="button {{ 'secondary' if google_ready else 'primary' }} wide" href="/auth/seatalk">Entrar com SeaTalk</a><p class="provider-note">No aplicativo SeaTalk, use esta opção para entrar com sua conta corporativa.</p>{% endif %}
+{% if sea_ready %}<a class="button {{ 'secondary' if google_ready else 'primary' }} wide" data-seatalk-native href="/auth/seatalk">Entrar com SeaTalk</a><p id="seatalk-native-status" class="provider-native-status" role="status" hidden></p><p class="provider-note">No aplicativo SeaTalk, a entrada usa sua conta corporativa automaticamente.</p>{% endif %}
+<button type="button" class="sea-browser-link" data-seatalk-browser hidden>Abrir no navegador ↗</button><p id="seatalk-browser-status" role="status" hidden></p>
 {% if not google_ready and not sea_ready %}<p class="notice">O acesso está aguardando configuração pelo administrador.</p>{% endif %}
 <hr><small>Acesso restrito às contas corporativas autorizadas.<br>Após entrar, selecione seu SOC ou a visão da rede.</small></div></section></main>
-{% endblock %}
+{% endif %}{% endblock %}
