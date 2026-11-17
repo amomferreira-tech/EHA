@@ -6,3 +6,15 @@
 @media(max-width:760px){.app-sidebar{width:245px;transform:translateX(-100%);transition:transform .18s ease}.menu-open .app-sidebar{transform:translateX(0)}.live-app:has(.app-sidebar){padding-left:0;padding-top:52px}.menu-toggle{display:flex;align-items:center;gap:12px;position:fixed;left:0;right:0;top:0;width:100%;height:52px;z-index:50;border-radius:0;background:#fff9f4;color:#ee4d2d;border-bottom:1px solid #f1ded2;font-size:20px;padding:12px 19px}.menu-toggle span{font-size:14px;font-weight:650}.menu-open .app-sidebar{top:52px}.menu-shade:not([hidden]){display:block;position:fixed;inset:52px 0 0;background:#3f23174d;border-radius:0;z-index:44}.live-app:has(.app-sidebar)>.live-header{height:auto;min-height:65px;padding:14px 18px;gap:15px}.live-app:has(.app-sidebar)>.live-header .header-caption{font-size:9px}.live-app:has(.app-sidebar)>.live-header .header-caption span{display:none}.live-app:has(.app-sidebar)>.live-main{padding:23px 16px}.live-header .account{gap:10px;font-size:9px;max-width:63%;text-align:right}.about-owner{display:block;min-height:0}.about-photo{height:300px;min-height:0}.about-photo img{height:300px;object-position:50% 25%}.about-owner-copy{padding:28px 24px}.about-owner-copy h2{font-size:28px}.about-grid{grid-template-columns:1fr;gap:17px}.about-support{display:block}.about-support .button{margin-top:15px}.about-card{padding:24px}.shell-page-title{font-size:13px}.sea-welcome{padding:25px}.sea-welcome h1{font-size:27px}}
 
 .about-owner-copy .about-role{margin:2px 0 12px;color:#d36c42;line-height:1.5}.about-role strong{display:block;font-size:14px;font-weight:600}.about-role span{display:block;font-size:11px;color:#ac886e;margin-top:4px}
+
+/* Ocultar o menu libera toda a largura; o botão continua disponível. */
+@media(min-width:761px){
+  :root{--eha-sidebar-width:235px}
+  .menu-toggle{display:flex;position:fixed;left:calc(var(--eha-sidebar-width) + 14px);top:20px;width:40px;height:40px;min-height:40px;padding:8px;z-index:50;background:#fff5ed;border:1px solid #f0dbcd;color:#df633c;font-size:20px;line-height:1}
+  .menu-toggle span{display:none}
+  .live-app:has(.app-sidebar)>.live-header{padding-left:76px}
+  .menu-collapsed .app-sidebar{transform:translateX(-100%);visibility:hidden}
+  .menu-collapsed .live-app:has(.app-sidebar){padding-left:0}
+  .menu-collapsed .menu-toggle{left:16px}
+}
+@media(min-width:761px) and (max-width:1100px){:root{--eha-sidebar-width:205px}}
