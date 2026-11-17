@@ -49,6 +49,67 @@ def daily_summary(rows,start,end,soc='',flow='',reason='',hour=None):
     return [dict(day=r['day'],bips=r['bips'],shipments=r['shipments'],observed=r['observed'],
         operators=len(r['people']),stations=len(r['stations']),hours=len(r['hours'])) for r in entries.values()]
 
+
+def add_period_breakdown(result,rows,period,soc='',flow='',reason='',hour=None):
+    """Colunas de dias/semanas com os mesmos filtros do consolidado."""
+    if period['kind']=='day':
+        return
+    columns=[]
+    positions={}
+    current=date.fromisoformat(period['start'])
+    end=date.fromisoformat(period['end'])
+    while current<=end:
+        key=(current-timedelta(days=current.weekday())).isoformat() if period['kind']=='month' else current.isoformat()
+        if key not in positions:
+            positions[key]=len(columns)
+            columns.append(dict(key=key,label=f'S{current.isocalendar().week:02d}' if period['kind']=='month' else current.strftime('%d/%m'),
+                start=current.isoformat(),end=current.isoformat(),observed=False,bips=0))
+        columns[positions[key]]['end']=current.isoformat()
+        current+=timedelta(days=1)
+    n=len(columns)
+    matrix={r['soc']:r for r in result.get('matrix',[])}
+    people={(r['soc'],r['name']):r for r in result.get('people',[])}
+    reasons={r['name']:r for r in result.get('reasons',[])}
+    operator_reasons={}
+    for item in matrix.values():
+        item['period_values']=[None]*n
+    for key,item in people.items():
+        item['period_values']=[0]*n
+        item['period_shipments']=[0]*n
+        for detail in item['reasons']:
+            detail['period_values']=[0]*n
+            operator_reasons[(*key,detail['name'])]=detail
+    for item in reasons.values():
+        item['period_values']=[0]*n
+    for row in rows:
+        if ((soc and row['soc_name']!=soc) or (flow and row.get('fluxo')!=flow)
+            or (reason and (row.get('exception_reason') or 'Não informado')!=reason)
+            or (hour is not None and row['hour']!=hour)):
+            continue
+        day=date.fromisoformat(str(row.get('operational_day') or row.get('day') or period['start'])[:10])
+        key=(day-timedelta(days=day.weekday())).isoformat() if period['kind']=='month' else day.isoformat()
+        if key not in positions:
+            continue
+        i=positions[key]
+        columns[i]['observed']=True
+        columns[i]['bips']+=row['bips']
+        station=matrix.get(row['soc_name'])
+        if station is not None:
+            station['period_values'][i]=(station['period_values'][i] or 0)+row['bips']
+        name=row.get('operator') or 'Não informado'
+        op=people.get((row['soc_name'],name))
+        if op is not None:
+            op['period_values'][i]+=row['bips']
+            op['period_shipments'][i]+=row.get('shipments',0)
+        reason_name=row.get('exception_reason') or 'Não informado'
+        detail=operator_reasons.get((row['soc_name'],name,reason_name))
+        if detail is not None:
+            detail['period_values'][i]+=row['bips']
+        detail=reasons.get(reason_name)
+        if detail is not None:
+            detail['period_values'][i]+=row['bips']
+    result['period_columns']=columns
+
 DIMS = ('soc_name', 'operator', 'exception_reason', 'fluxo', 'sub_area', 'before_station_type')
 REQUIRED = ('cutoff', 'hora_resolucao', *(k for k in DIMS if k not in ('sub_area','before_station_type')), 'resolved_shipment', 'resolved_bips')
 

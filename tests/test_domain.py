@@ -1,5 +1,5 @@
 import unittest
-from domain import normalize, summarize, fingerprint,overall,period_range,daily_summary
+from domain import normalize, summarize, fingerprint,overall,period_range,daily_summary,add_period_breakdown
 
 HEAD = ['year_resolved','month_resolved','week_resolved','cutoff','hora_resolucao','soc_name',
         'exception_reason','operator','fluxo','resolved_shipment','resolved_bips','sub_area','before_station_type']
@@ -10,6 +10,21 @@ def row(day='2026-11-16',hour=7,soc='SOC A',operator='Pessoa A',bips=8,shipments
 
 
 class DomainTests(unittest.TestCase):
+    def test_month_columns_and_operator_reason_totals(self):
+        period=period_range('2026-11-17','month')
+        rows=[dict(operational_day=day,soc_name='A',hour=7,operator='Ana',exception_reason='Etiqueta',fluxo='FWD',bips=n,shipments=n)
+              for day,n in [('2026-11-01',5),('2026-11-16',10),('2026-11-17',20),('2026-11-30',7)]]
+        result=summarize(rows,['A'],'2026-11-17',soc='A')
+        add_period_breakdown(result,rows,period,'A')
+        columns=result['period_columns']
+        self.assertEqual(columns[0]['start'],'2026-11-01')
+        self.assertEqual(columns[-1]['end'],'2026-11-30')
+        self.assertEqual([c['label'] for c in columns],['S44','S45','S46','S47','S48','S49'])
+        self.assertEqual(sum(c['bips'] for c in columns),42)
+        self.assertEqual(sum(result['people'][0]['period_values']),42)
+        self.assertEqual(result['people'][0]['period_values'],result['people'][0]['reasons'][0]['period_values'])
+        self.assertIsNone(result['matrix'][0]['period_values'][1])
+
     def test_new_source_with_code_and_without_before_station(self):
         header=['year_resolved','month_resolved','week_resolved','cutoff','hora_resolucao','soc_name',
             'soc_code','exception_reason','operator','fluxo','resolved_shipment','resolved_bips','sub_area']

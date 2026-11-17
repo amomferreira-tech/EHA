@@ -13,7 +13,7 @@ from authlib.integrations.base_client.errors import MismatchingStateError
 from flask import Flask, jsonify, redirect, render_template, request, session, abort
 import store
 import seatalk_login
-from domain import summarize,overall,period_range,daily_summary
+from domain import summarize,overall,period_range,daily_summary,add_period_breakdown
 from schedules import parse_starts,shift_totals,hour_calendar
 from collection_schedule import is_stale,collection_minute,next_collection
 
@@ -315,6 +315,7 @@ def create_app():
             rows=store.read_overall(day) if period['kind']=='day' else store.read_overall_period(period['start'],period['end'])
             result=overall(rows,cat['stations'],day)
             result['daily_totals']=daily_summary(rows,period['start'],period['end'])
+            add_period_breakdown(result,rows,period)
         else:
             rows=store.read_day(day,soc) if period['kind']=='day' else store.read_period(period['start'],period['end'],soc)
             flow=request.args.get('flow','')
@@ -341,6 +342,7 @@ def create_app():
             result['soc_code']=cat.get('station_codes',{}).get(soc,'')
             result['hour']=hour
             result['daily_totals']=daily_summary(selected_rows,period['start'],period['end'],soc,flow,reason,hour)
+            add_period_breakdown(result,selected_rows,period,soc,flow,reason,hour)
         result['view']=view
         result['period']=period
         result['station_codes']=cat.get('station_codes',{})

@@ -21,9 +21,11 @@ function setView(next,push=true){const stationSelected=!!$('soc').value;view=sta
 function syncStatus(sync){const stamp=sync.last_success?new Date(sync.last_success).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}):'nenhuma coleta';$('sync').textContent=(sync.failed?'Falha na coleta · ':sync.stale?'Atualização pendente · ':'Última coleta · ')+stamp+' · Coleta horária no minuto '+String(sync.collection_minute??20).padStart(2,'0');$('sync').className=sync.failed||sync.stale?'warning':'good';if(sync.failed&&sync.error){$('error').textContent=sync.error;$('error').hidden=false;}}
 function paintNetwork(){
   if(!current||current.view!=='overall')return;
+  $('matrix-head').closest('table').classList.toggle('period-matrix',(current.period?.kind||'day')!=='day');
+  if((current.period?.kind||'day')!=='day'){paintPeriodNetwork();return;}
   const q=norm($('network-search').value);const rows=current.matrix.filter(r=>norm(r.soc+' '+short(r.soc)).includes(q));
   $('overall-bips').textContent=fmt(current.bips);$('soc-count').textContent=fmt(current.active_socs);$('network-hours').textContent=current.coverage.length+' de 24 '+(current.period?.kind==='day'?'horas':'faixas horárias')+' com registros salvos';
-  $('matrix-head').innerHTML='<tr><th>ESTAÇÃO</th><th>TOTAL BIPS</th>'+NETWORK_HOURS.map(h=>`<th>${String(h).padStart(2,'0')}h<small class="day-marker">${h<6?'D+1':'D0'}</small></th>`).join('')+'</tr>';
+  $('matrix-head').innerHTML='<tr><th>UNIDADE</th><th>TOTAL BIPS</th>'+NETWORK_HOURS.map(h=>`<th>${String(h).padStart(2,'0')}h<small class="day-marker">${h<6?'D+1':'D0'}</small></th>`).join('')+'</tr>';
   const max=Math.max(1,...rows.flatMap(r=>r.hours.filter(n=>n!==null)));
   $('matrix-body').innerHTML=rows.map(r=>`<tr><td><button class="soc-link" data-soc="${esc(r.soc)}">${esc(short(r.soc))}<span>${esc(stationCode(r.soc)?stationName(r.soc):'Ver detalhe ↗')}</span></button></td><td>${r.hours.some(n=>n!==null)?fmt(r.bips):'—'}</td>${NETWORK_HOURS.map(h=>{const n=r.hours[h];return `<td ${n===null?'':`style="background:rgba(238,77,45,${.025+.2*n/max})"`}>${n===null?'—':fmt(n)}</td>`;}).join('')}</tr>`).join('');
   const total=rows.reduce((n,r)=>n+r.bips,0);
@@ -51,9 +53,11 @@ function paintPareto(rows,total){
   const count=rows.findIndex(r=>r.cumulative>=.8)+1;$('pareto-insight').textContent=`${count} ${count===1?'motivo concentra':'motivos concentram'} ${pct(rows[count-1].cumulative)} dos bips`;
 }
 function miniHours(hours){return '<div class="mini-hours">'+HOURS.map(h=>({h,n:hours[h]})).map(({n,h})=>n>0?`<span><small>${hourLabel(h)}</small><b>${fmt(n)}</b></span>`:'').join('')+'</div>';}
-function paintReasons(rows){$('reason-count').textContent=rows.length+' motivos';$('reason-rows').innerHTML=rows.map(r=>`<tr><td><details class="reason-detail"><summary>${esc(r.name)}</summary><p>${fmt(r.operators)} colaboradores com registro</p>${miniHours(r.hours)}</details></td><td>${fmt(r.bips)}</td><td>${fmt(r.shipments)}</td><td>${pct(r.share)}</td><td>${pct(r.cumulative)}</td></tr>`).join('')||'<tr><td colspan="5">Sem registros neste recorte.</td></tr>';}
+function paintReasons(rows){$('reason-count').textContent=rows.length+' motivos';$('reason-rows').innerHTML=rows.map(r=>`<tr><td><details class="reason-detail"><summary>${esc(r.name)}</summary><p>${fmt(r.operators)} colaboradores com registro</p>${(current.period?.kind||'day')!=='day'?miniPeriodValues(r.period_values):miniHours(r.hours)}</details></td><td>${fmt(r.bips)}</td><td>${fmt(r.shipments)}</td><td>${pct(r.share)}</td><td>${pct(r.cumulative)}</td></tr>`).join('')||'<tr><td colspan="5">Sem registros neste recorte.</td></tr>';}
 function paintPeople(){
   if(!current||current.view!=='soc')return;
+  $('people-head').closest('table').classList.toggle('period-matrix',(current.period?.kind||'day')!=='day');
+  if((current.period?.kind||'day')!=='day'){paintPeriodPeople();return;}
   if(operatorStation!==current.soc){expandedOperators.clear();operatorStation=current.soc;}
   const q=norm($('search').value),rows=current.people.filter(p=>norm(p.name).includes(q));
   const observed=new Set(current.coverage.map(r=>r.hour));
@@ -77,9 +81,10 @@ function paintShiftControls(data){
   const definition=data.schedule,first=definition.hour_order[0],last=definition.hour_order[23];
   const hh=h=>String(h).padStart(2,'0')+'h';
   $('hour-range').textContent=hh(first)+' D0 → '+hh(last)+(first===0?' D0':' D+1')+(definition.configured?' · Do início do T1 à última hora do T3':' · Ordem padrão, configure os turnos da unidade')+(data.period?.kind!=='day'?' · Horas acumuladas do período':'');
+  if(data.period?.kind!=='day')$('hour-range').textContent=periodDate(data.period.start)+' a '+periodDate(data.period.end)+(data.period.kind==='month'?' · Semanas do mês':' · Segunda a domingo');
   $('schedule-note').hidden=definition.configured;
   $('schedule-note').innerHTML='Horários ainda não definidos para este SOC. <a href="/settings?soc='+encodeURIComponent(data.soc)+'">Configurar T1, T2 e T3</a>.';
-  $('shift-tabs').innerHTML=definition.configured?`<button data-shift="" aria-pressed="${!selectedShift}">Dia completo<small>${hh(first)} → ${hh(last)}</small></button>`+definition.shifts.map(s=>`<button data-shift="${s.id}" aria-pressed="${selectedShift===s.id}">${s.name}<small>${hh(s.start)}–${hh(s.end)}</small></button>`).join(''):'';
+  $('shift-tabs').innerHTML=definition.configured?`<button data-shift="" aria-pressed="${!selectedShift}">${data.period?.kind==='week'?'Semana completa':data.period?.kind==='month'?'Mês completo':'Dia completo'}<small>${hh(first)} → ${hh(last)}</small></button>`+definition.shifts.map(s=>`<button data-shift="${s.id}" aria-pressed="${selectedShift===s.id}">${s.name}<small>${hh(s.start)}–${hh(s.end)}</small></button>`).join(''):'';
   $('shift-summary').innerHTML=data.shift_totals.map(s=>`<div><b>${s.name} · ${hh(s.start)}–${hh(s.end)}</b><strong>${fmt(s.bips)} bips</strong><span>${fmt(s.shipments)} pacotes · ${s.observed_hours}/${s.hours.length} horas com registro</span></div>`).join('');
 }
 function paintSoc(data){
@@ -88,7 +93,7 @@ function paintSoc(data){
   const period=selectedHour===null?(selectedShift?selectedShift.toUpperCase()+' · Turno selecionado':(data.period?.kind==='week'?'Semana completa':data.period?.kind==='month'?'Mês completo':'Dia completo')):hourLabel(selectedHour)+' · Hora selecionada';$('detail-period').textContent=period;$('hour-caption').textContent=period;$('bips-caption').textContent=period;
   $('bips').textContent=fmt(data.bips);$('shipments').textContent=fmt(data.shipments);$('operators').textContent=fmt(data.operators);$('saved-hours').textContent=fmt(data.preserved_hours??data.coverage.length)+'/'+fmt(data.possible_hours||24);$('saved-range').textContent=data.coverage.length?(data.period?.kind==='day'?'Do dia operacional selecionado':'Horas salvas no período'):'Aguardando a primeira observação';$('empty').hidden=data.series.some(r=>r.observed);$('clear-hour').hidden=selectedHour===null;
   options($('flow'),data.available_flows,'Todos os fluxos');options($('reason'),data.available_reasons,'Todos os motivos');
-  paintHourChart(data.daily_series);paintPareto(data.reasons,data.bips);paintReasons(data.reasons);paintPeople();
+  paintProductionChart(data);paintPareto(data.reasons,data.bips);paintReasons(data.reasons);paintPeople();
   $('flows').innerHTML=data.flows.map(r=>`<div class="reason"><div class="reason-line"><span>${esc(r.name)}</span><b>${fmt(r.bips)} · ${pct(data.bips?r.bips/data.bips:0)}</b></div><div class="track"><i style="width:${data.bips?r.bips/data.bips*100:0}%"></i></div></div>`).join('')||'<p class="no-data">Sem fluxo registrado.</p>';
   $('flow-summary').textContent=`${fmt(data.bips)} bips · ${fmt(data.shipments)} pacotes no recorte`;
   const coverage=new Map(data.coverage.map(r=>[r.hour,r]));$('coverage').innerHTML=HOURS.map(h=>`<span class="${coverage.has(h)?'saved':''}" title="${coverage.has(h)?'Hora preservada. Última observação: '+new Date(coverage.get(h).last_seen).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'Sem observação salva'}">${String(h).padStart(2,'0')}h ${hourDay(h)}</span>`).join('');
@@ -99,7 +104,7 @@ async function load(){
   $('refresh').disabled=true;$('error').hidden=true;$('period-panel').hidden=true;$('sync').textContent='Atualizando o recorte…';
   if(view==='soc'){$('soc-content').hidden=true;$('pick-soc').hidden=true;}
   const p=new URLSearchParams({view,day:$('day').value,period:$('period').value});if(view==='soc'){p.set('soc',$('soc').value);p.set('flow',$('flow').value);p.set('reason',$('reason').value);if(selectedHour!==null)p.set('hour',selectedHour);if(selectedShift)p.set('shift',selectedShift);}
-  try{const data=await api('/api/dashboard?'+p);if(requestVersion!==version)return;current=data;catalog.station_codes=data.station_codes||catalog.station_codes||{};paintPeriod(data);syncStatus(data.sync);if(view==='overall'){$('scope').textContent='Todos os SOCs · Processado H/H';paintNetwork();}else paintSoc(data);}
+  try{const data=await api('/api/dashboard?'+p);if(requestVersion!==version)return;current=data;catalog.station_codes=data.station_codes||catalog.station_codes||{};paintPeriod(data);syncStatus(data.sync);if(view==='overall'){$('scope').textContent='Todos os SOCs · '+(data.period?.kind==='week'?'Processado por dia':data.period?.kind==='month'?'Processado por semana':'Processado H/H');paintNetwork();}else paintSoc(data);}
   catch(e){if(requestVersion!==version)return;current=null;$('error').textContent=e.message;$('error').hidden=false;$('sync').textContent='Atualização não concluída';if(view==='soc'){$('soc-content').hidden=true;$('pick-soc').hidden=false;}}
   finally{if(requestVersion===version)$('refresh').disabled=false;}
 }
