@@ -229,7 +229,8 @@ def create_app():
     @app.route('/station', methods=['GET','POST'])
     @protected
     def station():
-        stations=store.catalog()['stations']
+        cat=store.catalog()
+        stations=cat['stations']
         if request.method=='POST':
             csrf()
             selected=request.form.get('station','')
@@ -238,7 +239,7 @@ def create_app():
             store.preference(session['user']['email'],selected)
             session['station']=selected
             return redirect('/')
-        return render_template('station.html',stations=stations,
+        return render_template('station.html',stations=stations,station_codes=cat.get('station_codes',{}),
                     selected=store.preference(session['user']['email']),csrf=session['csrf'])
 
     @app.get('/')
@@ -264,7 +265,8 @@ def create_app():
     @app.route('/settings',methods=['GET','POST'])
     @protected
     def settings():
-        stations=store.catalog()['stations']
+        cat=store.catalog()
+        stations=cat['stations']
         soc=request.form.get('soc','') if request.method=='POST' else request.args.get('soc','')
         if not soc and session.get('station') in stations:
             soc=session['station']
@@ -286,7 +288,7 @@ def create_app():
             except ValueError as exc:
                 error=str(exc)
         return render_template('settings.html',user=session['user'],csrf=session['csrf'],
-            stations=stations,soc=soc,definition=definition,values=values,error=error,
+            stations=stations,station_codes=cat.get('station_codes',{}),soc=soc,definition=definition,values=values,error=error,
             saved=request.args.get('saved')=='1'),400 if error else 200
 
     @app.get('/api/dashboard')
@@ -331,8 +333,10 @@ def create_app():
             result['available_reasons']=sorted({r['exception_reason'] or 'Não informado' for r in rows})
             result['available_flows']=sorted({r['fluxo'] for r in rows if r['fluxo']})
             result['soc']=soc
+            result['soc_code']=cat.get('station_codes',{}).get(soc,'')
             result['hour']=hour
         result['view']=view
+        result['station_codes']=cat.get('station_codes',{})
         result['coverage']=store.coverage(day,soc if view=='soc' else '')
         status=store.sync_status()
         good=status['last_success']

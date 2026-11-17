@@ -6,7 +6,7 @@ import hashlib
 import json
 
 DIMS = ('soc_name', 'operator', 'exception_reason', 'fluxo', 'sub_area', 'before_station_type')
-REQUIRED = ('cutoff', 'hora_resolucao', *(k for k in DIMS if k!='sub_area'), 'resolved_shipment', 'resolved_bips')
+REQUIRED = ('cutoff', 'hora_resolucao', *(k for k in DIMS if k not in ('sub_area','before_station_type')), 'resolved_shipment', 'resolved_bips')
 
 
 def integer(value):
@@ -40,9 +40,13 @@ def normalize(values):
     if any(headers.count(k) != 1 for k in REQUIRED):
         raise ValueError('Cabeçalhos ausentes ou duplicados na fonte.')
     positions = {k: headers.index(k) for k in REQUIRED}
-    if headers.count('sub_area')==1:
-        positions['sub_area']=headers.index('sub_area')
+    for optional in ('sub_area','before_station_type','soc_code'):
+        if headers.count(optional)>1:
+            raise ValueError('Cabeçalho opcional duplicado na fonte.')
+        if optional in headers:
+            positions[optional]=headers.index(optional)
     grouped = defaultdict(lambda: [0, 0])
+    station_codes={}
     for line, row in enumerate(values[1:], 2):
         if not any(str(v).strip() for v in row):
             continue
@@ -52,6 +56,12 @@ def normalize(values):
             hour = integer(data['hora_resolucao'])
             if hour > 23 or not str(data['soc_name']).strip():
                 raise ValueError('Hora ou estação inválida.')
+            code=str(data.get('soc_code','')).strip()
+            station=str(data['soc_name']).strip()
+            if code:
+                if len(code)>80 or (station in station_codes and station_codes[station]!=code):
+                    raise ValueError('Código de unidade inválido ou divergente na carga.')
+                station_codes[station]=code
             dims = tuple(str(data.get(k,'')).strip() for k in DIMS)
             key = (day, hour, *dims)
             grouped[key][0] += integer(data['resolved_bips'])
@@ -62,12 +72,17 @@ def normalize(values):
         raise ValueError('Nenhuma linha válida. Histórico preservado.')
     buckets = defaultdict(list)
     for key, counts in sorted(grouped.items()):
-        buckets[key[:3]].append(dict(zip((*DIMS, 'bips', 'shipments'), (*key[2:], *counts))))
+        record=dict(zip((*DIMS, 'bips', 'shipments'), (*key[2:], *counts)))
+        if station_codes.get(key[2]):
+            record['soc_code']=station_codes[key[2]]
+        buckets[key[:3]].append(record)
     return dict(buckets)
 
 
 def fingerprint(rows):
-    return hashlib.sha256(json.dumps(rows, ensure_ascii=False, sort_keys=True,
+    # O código é um rótulo da unidade; alterar o rótulo não altera a produção.
+    facts=[{k:v for k,v in row.items() if k!='soc_code'} for row in rows]
+    return hashlib.sha256(json.dumps(facts, ensure_ascii=False, sort_keys=True,
                                     separators=(',', ':')).encode()).hexdigest()
 
 

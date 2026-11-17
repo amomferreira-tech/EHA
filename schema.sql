@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS eha_preferences (
     station TEXT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS eha_stations (
+    soc_name TEXT PRIMARY KEY,
+    soc_code TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS eha_unit_settings (
     soc_name TEXT PRIMARY KEY,
     shift_starts JSONB NOT NULL CHECK(jsonb_typeof(shift_starts)='array' AND jsonb_array_length(shift_starts)=3),

@@ -20,6 +20,11 @@ def migrate():
 
 def save_buckets(conn, run_id, buckets):
     changed = 0
+    codes={soc:r['soc_code'] for (_,_,soc),rows in buckets.items() for r in rows if r.get('soc_code')}
+    for soc,code in sorted(codes.items()):
+        conn.execute('''INSERT INTO eha_stations(soc_name,soc_code) VALUES(%s,%s)
+            ON CONFLICT(soc_name) DO UPDATE SET soc_code=EXCLUDED.soc_code,updated_at=now()
+            WHERE eha_stations.soc_code IS DISTINCT FROM EXCLUDED.soc_code''',(soc,code))
     for (day, hour, soc), rows in sorted(buckets.items()):
         digest = fingerprint(rows)
         previous = conn.execute('''SELECT r.fingerprint FROM eha_latest l
@@ -48,7 +53,9 @@ def catalog():
             LEFT JOIN eha_unit_settings u ON u.soc_name=l.soc_name ORDER BY 1 DESC''')]
         flows = [r['fluxo'] for r in conn.execute('''SELECT DISTINCT f.fluxo FROM eha_latest l
             JOIN eha_facts f ON f.revision_id=l.revision_id WHERE f.fluxo<>'' ORDER BY 1''')]
-    return dict(stations=stations,days=days,flows=flows)
+        station_codes={r['soc_name']:r['soc_code'] for r in conn.execute('SELECT soc_name,soc_code FROM eha_stations')}
+    stations.sort(key=lambda name:(station_codes.get(name,name).casefold(),name))
+    return dict(stations=stations,days=days,flows=flows,station_codes=station_codes)
 
 
 def read_day(day,soc):

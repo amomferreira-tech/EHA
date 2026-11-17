@@ -3,7 +3,10 @@ const $=id=>document.getElementById(id);
 const fmt=n=>new Intl.NumberFormat('pt-BR').format(n);
 const pct=n=>(n*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const short=s=>String(s).replace(/^SoC_/i,'').replaceAll('_',' · ');
+const stationName=s=>String(s).replace(/^SoC_/i,'').replaceAll('_',' · ');
+const stationCode=s=>catalog?.station_codes?.[s]||'';
+const short=s=>stationCode(s)||stationName(s);
+const stationText=s=>stationCode(s)?stationCode(s)+' · '+stationName(s):s;
 const norm=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replaceAll('_',' ');
 const NETWORK_HOURS=Array.from({length:24},(_,i)=>(i+6)%24);
 let HOURS=[...NETWORK_HOURS];
@@ -12,17 +15,17 @@ const hourLabel=h=>String(h).padStart(2,'0')+'h '+hourDay(h);
 let view='overall',current=null,selectedHour=null,peopleLimit=100,version=0,catalog=null,operatorStation='',selectedShift='';
 const expandedOperators=new Set();
 async function api(url){const r=await fetch(url);if(r.status===401){location.href='/login';throw Error('Sua sessão expirou.');}const d=await r.json();if(!r.ok)throw Error(d.error||'Não foi possível consultar os dados.');return d;}
-function options(select,values,first){const previous=select.value;select.replaceChildren();for(const [value,label] of [['',first],...values.map(v=>[v,v])]){const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);}select.value=values.includes(previous)?previous:'';select.dispatchEvent(new Event('optionsupdated'));}
+function options(select,values,first){const previous=select.value;select.replaceChildren();for(const [value,label] of [['',first],...values.map(v=>[v,select.id==='soc'?stationText(v):v])]){const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);}select.value=values.includes(previous)?previous:'';select.dispatchEvent(new Event('optionsupdated'));}
 function saveLocation(push=false){const p=new URLSearchParams({view,day:$('day').value});if($('soc').value)p.set('soc',$('soc').value);if(view==='soc'){if($('flow').value)p.set('flow',$('flow').value);if($('reason').value)p.set('reason',$('reason').value);if(selectedHour!==null)p.set('hour',selectedHour);if(selectedShift)p.set('shift',selectedShift);}history[push?'pushState':'replaceState']({},'',location.pathname+'?'+p);}
 function setView(next,push=true){const stationSelected=!!$('soc').value;view=stationSelected?'soc':next;$('view-tabs').hidden=true;$('detail-switcher').hidden=!stationSelected;$('unit-nav').hidden=true;$('settings-link').href='/settings'+(stationSelected?'?soc='+encodeURIComponent($('soc').value):'');$('production-link').href='/?view=soc&soc='+encodeURIComponent($('soc').value);const settingsNav=document.querySelector('[data-side-settings]');if(settingsNav)settingsNav.href='/settings'+(stationSelected?'?soc='+encodeURIComponent($('soc').value):'');const unitNav=document.querySelector('[data-side-view="soc"]');if(unitNav)unitNav.href='/soc'+(stationSelected?'?soc='+encodeURIComponent($('soc').value):'');for(const link of document.querySelectorAll('[data-side-view]')){const active=link.dataset.sideView===view;link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}for(const name of ['overall','soc']){const selected=name===view;$('tab-'+name).setAttribute('aria-selected',String(selected));$('tab-'+name).tabIndex=selected?0:-1;$('view-'+name).hidden=!selected;}if(stationSelected){for(const id of ['matrix-head','matrix-body','matrix-foot'])$(id).replaceChildren();$('overall-bips').textContent='—';$('soc-count').textContent='—';}for(const id of ['soc-filter','flow-filter','reason-filter'])$(id).hidden=view!=='soc';$('pick-soc').hidden=stationSelected;$('soc-content').hidden=!stationSelected;peopleLimit=100;current=null;$('error').hidden=true;saveLocation(push);load();}
 function syncStatus(sync){const stamp=sync.last_success?new Date(sync.last_success).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}):'nenhuma coleta';$('sync').textContent=(sync.failed?'Falha na coleta · ':sync.stale?'Atualização pendente · ':'Última coleta · ')+stamp;$('sync').className=sync.failed||sync.stale?'warning':'good';if(sync.failed&&sync.error){$('error').textContent=sync.error;$('error').hidden=false;}}
 function paintNetwork(){
   if(!current||current.view!=='overall')return;
-  const q=norm($('network-search').value);const rows=current.matrix.filter(r=>norm(r.soc).includes(q));
+  const q=norm($('network-search').value);const rows=current.matrix.filter(r=>norm(r.soc+' '+short(r.soc)).includes(q));
   $('overall-bips').textContent=fmt(current.bips);$('soc-count').textContent=fmt(current.active_socs);$('network-hours').textContent=current.coverage.length+' de 24 horas com registros salvos';
   $('matrix-head').innerHTML='<tr><th>ESTAÇÃO</th><th>TOTAL BIPS</th>'+NETWORK_HOURS.map(h=>`<th>${String(h).padStart(2,'0')}h<small class="day-marker">${h<6?'D+1':'D0'}</small></th>`).join('')+'</tr>';
   const max=Math.max(1,...rows.flatMap(r=>r.hours.filter(n=>n!==null)));
-  $('matrix-body').innerHTML=rows.map(r=>`<tr><td><button class="soc-link" data-soc="${esc(r.soc)}">${esc(short(r.soc))}<span>Ver detalhe ↗</span></button></td><td>${r.hours.some(n=>n!==null)?fmt(r.bips):'—'}</td>${NETWORK_HOURS.map(h=>{const n=r.hours[h];return `<td ${n===null?'':`style="background:rgba(238,77,45,${.025+.2*n/max})"`}>${n===null?'—':fmt(n)}</td>`;}).join('')}</tr>`).join('');
+  $('matrix-body').innerHTML=rows.map(r=>`<tr><td><button class="soc-link" data-soc="${esc(r.soc)}">${esc(short(r.soc))}<span>${esc(stationCode(r.soc)?stationName(r.soc):'Ver detalhe ↗')}</span></button></td><td>${r.hours.some(n=>n!==null)?fmt(r.bips):'—'}</td>${NETWORK_HOURS.map(h=>{const n=r.hours[h];return `<td ${n===null?'':`style="background:rgba(238,77,45,${.025+.2*n/max})"`}>${n===null?'—':fmt(n)}</td>`;}).join('')}</tr>`).join('');
   const total=rows.reduce((n,r)=>n+r.bips,0);
   const hours=NETWORK_HOURS.map(h=>{const values=rows.map(r=>r.hours[h]).filter(n=>n!==null);return values.length?fmt(values.reduce((a,b)=>a+b,0)):'—';});
   $('matrix-foot').innerHTML=rows.length?`<tr><td>${q?'TOTAL DO FILTRO':'TOTAL GERAL'}</td><td>${fmt(total)}</td>${hours.map(v=>`<td>${v}</td>`).join('')}</tr>`:'';
@@ -96,7 +99,7 @@ async function load(){
   $('refresh').disabled=true;$('error').hidden=true;$('sync').textContent='Atualizando o recorte…';
   if(view==='soc'){$('soc-content').hidden=true;$('pick-soc').hidden=true;}
   const p=new URLSearchParams({view,day:$('day').value});if(view==='soc'){p.set('soc',$('soc').value);p.set('flow',$('flow').value);p.set('reason',$('reason').value);if(selectedHour!==null)p.set('hour',selectedHour);if(selectedShift)p.set('shift',selectedShift);}
-  try{const data=await api('/api/dashboard?'+p);if(requestVersion!==version)return;current=data;syncStatus(data.sync);if(view==='overall'){$('scope').textContent='Todos os SOCs · Processado H/H';paintNetwork();}else paintSoc(data);}
+  try{const data=await api('/api/dashboard?'+p);if(requestVersion!==version)return;current=data;catalog.station_codes=data.station_codes||catalog.station_codes||{};syncStatus(data.sync);if(view==='overall'){$('scope').textContent='Todos os SOCs · Processado H/H';paintNetwork();}else paintSoc(data);}
   catch(e){if(requestVersion!==version)return;current=null;$('error').textContent=e.message;$('error').hidden=false;$('sync').textContent='Atualização não concluída';if(view==='soc'){$('soc-content').hidden=true;$('pick-soc').hidden=false;}}
   finally{if(requestVersion===version)$('refresh').disabled=false;}
 }

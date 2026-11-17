@@ -13,7 +13,7 @@ def load_sheet():
     sheet = os.getenv('SHEET_NAME', 'DB Resolved').replace("'", "''")
     with AuthorizedSession(credentials) as client:
         response = client.get(f'https://sheets.googleapis.com/v4/spreadsheets/{quote(spreadsheet, safe="")}/values/'
-                              + quote(f"'{sheet}'!A:M", safe=''),
+                              + quote(f"'{sheet}'!A:Z", safe=''),
                               params={'valueRenderOption':'UNFORMATTED_VALUE', 'dateTimeRenderOption':'SERIAL_NUMBER'},
                               timeout=(10,90))
         response.raise_for_status()
