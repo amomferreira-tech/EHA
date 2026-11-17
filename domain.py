@@ -4,6 +4,50 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+import calendar
+
+
+def period_range(day,period='day'):
+    anchor=date.fromisoformat(day)
+    if period=='day':
+        start=end=anchor
+    elif period=='week':
+        start=anchor-timedelta(days=anchor.weekday())
+        end=start+timedelta(days=6)
+    elif period=='month':
+        start=anchor.replace(day=1)
+        end=anchor.replace(day=calendar.monthrange(anchor.year,anchor.month)[1])
+    else:
+        raise ValueError('Período inválido.')
+    return dict(kind=period,start=start.isoformat(),end=end.isoformat(),days=(end-start).days+1)
+
+
+def daily_summary(rows,start,end,soc='',flow='',reason='',hour=None):
+    entries={}
+    current=date.fromisoformat(start)
+    last=date.fromisoformat(end)
+    while current<=last:
+        key=current.isoformat()
+        entries[key]=dict(day=key,bips=0,shipments=0,observed=False,people=set(),stations=set(),hours=set())
+        current+=timedelta(days=1)
+    for r in rows:
+        if ((soc and r['soc_name']!=soc) or (flow and r.get('fluxo')!=flow)
+            or (reason and (r.get('exception_reason') or 'Não informado')!=reason)
+            or (hour is not None and r['hour']!=hour)):
+            continue
+        key=str(r.get('operational_day') or r.get('day') or start)[:10]
+        if key not in entries:
+            continue
+        item=entries[key]
+        item['observed']=True
+        item['bips']+=r['bips']
+        item['shipments']+=r.get('shipments',0)
+        item['stations'].add(r['soc_name'])
+        item['hours'].add((r['soc_name'],r['hour']))
+        if r.get('operator'):
+            item['people'].add((r['soc_name'],r['operator']))
+    return [dict(day=r['day'],bips=r['bips'],shipments=r['shipments'],observed=r['observed'],
+        operators=len(r['people']),stations=len(r['stations']),hours=len(r['hours'])) for r in entries.values()]
 
 DIMS = ('soc_name', 'operator', 'exception_reason', 'fluxo', 'sub_area', 'before_station_type')
 REQUIRED = ('cutoff', 'hora_resolucao', *(k for k in DIMS if k not in ('sub_area','before_station_type')), 'resolved_shipment', 'resolved_bips')

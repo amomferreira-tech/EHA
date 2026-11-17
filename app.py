@@ -13,8 +13,9 @@ from authlib.integrations.base_client.errors import MismatchingStateError
 from flask import Flask, jsonify, redirect, render_template, request, session, abort
 import store
 import seatalk_login
-from domain import summarize,overall
+from domain import summarize,overall,period_range,daily_summary
 from schedules import parse_starts,shift_totals,hour_calendar
+from collection_schedule import is_stale,collection_minute,next_collection
 
 
 def create_app():
@@ -296,13 +297,13 @@ def create_app():
     def dashboard():
         day=request.args.get('day','')
         try:
-            date.fromisoformat(day)
+            period=period_range(day,request.args.get('period','day'))
             h=request.args.get('hour','')
             hour=int(h) if h else None
             if hour is not None and not 0<=hour<=23:
                 raise ValueError()
-        except ValueError:
-            return jsonify(error='Data ou hora inválida.'),400
+        except (ValueError,OverflowError):
+            return jsonify(error='Data, período ou hora inválida.'),400
         cat=store.catalog()
         soc=request.args.get('soc','')
         if soc and soc not in cat['stations']:
@@ -311,9 +312,11 @@ def create_app():
         if view not in ('soc','overall') or (view=='soc' and not soc):
             return jsonify(error='Escolha uma estação para abrir a visão do SOC.'),400
         if view=='overall':
-            result=overall(store.read_overall(day),cat['stations'],day)
+            rows=store.read_overall(day) if period['kind']=='day' else store.read_overall_period(period['start'],period['end'])
+            result=overall(rows,cat['stations'],day)
+            result['daily_totals']=daily_summary(rows,period['start'],period['end'])
         else:
-            rows=store.read_day(day,soc)
+            rows=store.read_day(day,soc) if period['kind']=='day' else store.read_period(period['start'],period['end'],soc)
             flow=request.args.get('flow','')
             reason=request.args.get('reason','')
             definition=store.unit_schedule(soc)
@@ -327,6 +330,8 @@ def create_app():
             for series in (result['series'],result['daily_series']):
                 for item in series:
                     item.update(hour_calendar(day,item['hour'],definition['starts'][0]))
+                    if period['kind']!='day':
+                        item.pop('date',None)
             result['schedule']=definition
             result['shift']=shift_id
             result['shift_totals']=shift_totals(rows,soc,definition,flow,reason)
@@ -335,15 +340,21 @@ def create_app():
             result['soc']=soc
             result['soc_code']=cat.get('station_codes',{}).get(soc,'')
             result['hour']=hour
+            result['daily_totals']=daily_summary(selected_rows,period['start'],period['end'],soc,flow,reason,hour)
         result['view']=view
+        result['period']=period
         result['station_codes']=cat.get('station_codes',{})
-        result['coverage']=store.coverage(day,soc if view=='soc' else '')
+        result['coverage']=(store.coverage(day,soc if view=='soc' else '') if period['kind']=='day' else
+            store.coverage_period(period['start'],period['end'],soc if view=='soc' else ''))
+        result['preserved_hours']=sum(r.get('buckets',1) for r in result['coverage']) if soc else None
+        result['possible_hours']=period['days']*24
         status=store.sync_status()
         good=status['last_success']
         result['sync']={'last_success':good.isoformat() if good else None,
             'error':status['last'].get('error') if status['last'] and status['last']['status']=='error' else None,
             'failed':bool(status['last'] and status['last']['status']=='error'),
-            'stale':not good or (datetime.now(timezone.utc)-good).total_seconds()>max(900,int(os.getenv('SYNC_SECONDS','300'))*3)}
+            'stale':is_stale(good),'collection_minute':collection_minute(),
+            'next_collection':next_collection(good).isoformat() if good else None}
         return jsonify(result)
 
     @app.errorhandler(500)

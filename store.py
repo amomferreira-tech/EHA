@@ -80,6 +80,43 @@ def read_overall(day):
             GROUP BY l.soc_name,l.hour ORDER BY l.soc_name,l.hour''',(day,)).fetchall()
 
 
+def read_period(start,end,soc):
+    with connection() as conn:
+        return conn.execute(f'''SELECT l.hour,f.soc_name,f.operator,f.exception_reason,f.fluxo,
+            sum(f.bips)::bigint AS bips,sum(f.shipments)::bigint AS shipments,
+            {_unit_day_sql()} AS operational_day
+            FROM eha_latest l JOIN eha_facts f ON f.revision_id=l.revision_id
+            LEFT JOIN eha_unit_settings u ON u.soc_name=l.soc_name
+            WHERE l.day BETWEEN %s::date-1 AND %s::date+1 AND l.soc_name=%s
+            AND {_unit_day_sql()} BETWEEN %s::date AND %s::date
+            GROUP BY 1,2,3,4,5,8 ORDER BY 8,1''',(start,end,soc,start,end)).fetchall()
+
+
+def read_overall_period(start,end):
+    with connection() as conn:
+        return conn.execute('''SELECT l.day,l.soc_name,l.hour,sum(f.bips)::bigint AS bips
+            FROM eha_latest l JOIN eha_facts f ON f.revision_id=l.revision_id
+            WHERE l.day BETWEEN %s::date AND %s::date
+            GROUP BY l.day,l.soc_name,l.hour ORDER BY l.day,l.soc_name,l.hour''',(start,end)).fetchall()
+
+
+def coverage_period(start,end,soc=''):
+    with connection() as conn:
+        if soc:
+            rows=conn.execute(f'''SELECT l.hour,max(l.last_seen_at) AS last_seen,
+                count(DISTINCT l.soc_name) AS stations,count(*) AS buckets
+                FROM eha_latest l LEFT JOIN eha_unit_settings u ON u.soc_name=l.soc_name
+                WHERE l.day BETWEEN %s::date-1 AND %s::date+1 AND l.soc_name=%s
+                AND {_unit_day_sql()} BETWEEN %s::date AND %s::date
+                GROUP BY l.hour ORDER BY l.hour''',(start,end,soc,start,end)).fetchall()
+        else:
+            rows=conn.execute('''SELECT hour,max(last_seen_at) AS last_seen,
+                count(DISTINCT soc_name) AS stations,count(*) AS buckets
+                FROM eha_latest WHERE day BETWEEN %s::date AND %s::date
+                GROUP BY hour ORDER BY hour''',(start,end)).fetchall()
+    return [dict(hour=r['hour'],last_seen=r['last_seen'].isoformat(),stations=r['stations'],buckets=r['buckets']) for r in rows]
+
+
 def coverage(day,soc=''):
     with connection() as conn:
         if soc:

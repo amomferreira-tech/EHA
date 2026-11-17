@@ -2,6 +2,8 @@
 import logging
 import os
 import time
+from datetime import datetime,timezone
+from collection_schedule import next_collection,collection_minute
 from domain import normalize
 from source import load_sheet
 from store import connection, migrate, save_buckets
@@ -67,4 +69,11 @@ if __name__ == '__main__':
             collect()
         except Exception as exc:
             logging.error('Banco indisponível: %s', type(exc).__name__)
-        time.sleep(max(60, int(os.getenv('SYNC_SECONDS','300'))))
+        scheduled=next_collection(datetime.now(timezone.utc))
+        logging.info('Próxima coleta programada para o minuto %02d da próxima janela horária.',collection_minute())
+        # Esperas curtas permitem encerrar o processo prontamente e lidar com ajuste do relógio.
+        while True:
+            remaining=(scheduled-datetime.now(timezone.utc)).total_seconds()
+            if remaining<=0:
+                break
+            time.sleep(min(30,remaining))

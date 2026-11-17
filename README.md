@@ -21,7 +21,7 @@ Não são usados dados demonstrativos em produção. A aplicação começa vazia
 
 ## Subir no Railway
 
-Crie um projeto com **PostgreSQL e um serviço EHA ligado a este repositório**. Use o arquivo padrão `railway.toml`, exponha uma URL pública e mantenha /healthz como healthcheck. O Dockerfile executa python start.py, que cria as tabelas e inicia o Web e o coletor no mesmo serviço. A coleta começa automaticamente e se repete a cada SYNC_SECONDS.
+Crie um projeto com **PostgreSQL e um serviço EHA ligado a este repositório**. Use o arquivo padrão `railway.toml`, exponha uma URL pública e mantenha /healthz como healthcheck. O Dockerfile executa python start.py, que cria as tabelas e inicia o Web e o coletor no mesmo serviço. A coleta começa automaticamente e volta a ocorrer no minuto 20 de cada hora.
 
 Cadastre todas as variáveis de Web e Coletor listadas abaixo no serviço EHA. Não é necessário criar um segundo serviço de aplicação. O supervisor encerra os dois processos e permite ao Railway reiniciar o serviço se um deles sair inesperadamente; os locks do banco impedem gravações simultâneas de coletores.
 
@@ -41,7 +41,7 @@ Se preferir separar os processos futuramente, use RUN_COLLECTOR=false no Web e c
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Coletor | JSON completo da conta de serviço, em uma variável secreta |
 | `SPREADSHEET_ID` | Coletor | Padrão: `1swhGmEQhrn0tyMUrRHA0q6LaxWg4WFl9CnGJtM1Jg4w` |
 | `SHEET_NAME` | Coletor | Padrão: `DB Resolved` |
-| `SYNC_SECONDS` | Ambos | Padrão: `300`; mínimo de coleta: 60 segundos |
+| `COLLECT_MINUTE` | Coletor/Web | Minuto da coleta horária (0–59); padrão: `20`. Opcional. |
 | `SEATALK_APP_ID` | Web | Opcional, para ativar Login with SeaTalk |
 | `SEATALK_APP_SECRET` | Web | Opcional, segredo do aplicativo SeaTalk |
 
@@ -73,7 +73,7 @@ Os horários são persistidos em `eha_unit_settings`, com versão e conta respon
 
 ## Contrato da base
 
-A aba `DB Resolved`, intervalo `A:M`, usa estes cabeçalhos na linha 1 (a ordem pode mudar; sub_area é opcional e ignorada na interface):
+A aba `DB Resolved`, intervalo `A:Z`, usa estes cabeçalhos na linha 1 (a ordem pode mudar; soc_code, sub_area e before_station_type são opcionais):
 
 ```text
 year_resolved month_resolved week_resolved cutoff hora_resolucao soc_name
@@ -92,7 +92,7 @@ exception_reason operator fluxo resolved_shipment resolved_bips sub_area before_
 
 ## Como o histórico funciona
 
-O coletor consulta a fonte a cada cinco minutos por padrão. Um lock de sessão PostgreSQL impede coleta simultânea por duas réplicas. Ele normaliza e valida toda a resposta antes de gravar.
+O coletor consulta a fonte uma vez por hora, no minuto 20, além de uma coleta inicial ao iniciar o processo. COLLECT_MINUTE permite ajustar o minuto (0–59); o antigo SYNC_SECONDS não define mais a frequência. Um lock de sessão PostgreSQL impede coleta simultânea por duas réplicas. Ele normaliza e valida toda a resposta antes de gravar.
 
 Para cada **cutoff + hora + SOC presente**, calcula um hash do conjunto agregado. Se o conteúdo mudou, cria uma revisão em `eha_revisions`, grava as linhas em `eha_facts` e atualiza a referência em `eha_latest`, tudo na mesma transação. Conteúdo idêntico apenas atualiza `last_seen_at`: **não acumula bips novamente**. As consultas somam apenas a revisão atual de cada hora/SOC.
 
@@ -137,3 +137,11 @@ A entrada Google preserva state/nonce de tentativas em andamento. Se o navegador
 Menu lateral com páginas independentes: /network, /soc, /settings e /about. A página Sobre identifica Amom dos Santos Ferreira de Paula, Associate Junior, SOC-RJ4, com foto fornecida pelo responsável e contato corporativo. Em telas pequenas, o menu abre pelo botão superior. Não são necessárias novas variáveis; o aplicativo SeaTalk precisa das permissões de Workspace/SSO aprovadas para as contas que vão acessar.
 
 Esta alteração foi preparada sem testes de execução, conferência no navegador ou prints, conforme solicitado. O fluxo real depende da aprovação/configuração do aplicativo no portal SeaTalk.
+
+## Códigos de unidade e períodos
+
+A coluna opcional soc_code é persistida em eha_stations e passa a identificar a unidade nas telas. O nome continua como informação complementar e como chave interna para preservar histórico, preferências e configurações. Uma mudança de código não cria revisão de produção nem duplica bips; códigos vazios não apagam o cadastro anterior. A leitura usa A:Z e posições pelos cabeçalhos. before_station_type e sub_area são opcionais e não aparecem como filtros; a ausência de before_station_type passa a ser aceita.
+
+O seletor Dia/Semana/Mês usa a data de referência. Semana significa segunda a domingo; mês inclui todos os dias do mês civil. A visão geral usa o ciclo 06h–05h e a visão individual aplica o início do T1 de cada SOC. Indicadores, colaboradores, motivos e faixas horárias acumulam o período. A evolução diária permite abrir um dia e mantém dias sem histórico como ausentes, em vez de produção zero. O detalhe continua disponível por turno, fluxo, motivo e hora. O volume semanal/mensal depende das coletas efetivamente salvas desde o início do histórico.
+
+A coleta ocorre no minuto 20 e o atraso só é sinalizado depois da próxima janela prevista acrescida de 15 minutos. A atualização automática da tela consulta o histórico no banco, não dispara consultas extras à planilha.

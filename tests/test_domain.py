@@ -1,5 +1,5 @@
 import unittest
-from domain import normalize, summarize, fingerprint,overall
+from domain import normalize, summarize, fingerprint,overall,period_range,daily_summary
 
 HEAD = ['year_resolved','month_resolved','week_resolved','cutoff','hora_resolucao','soc_name',
         'exception_reason','operator','fluxo','resolved_shipment','resolved_bips','sub_area','before_station_type']
@@ -10,6 +10,34 @@ def row(day='2026-11-16',hour=7,soc='SOC A',operator='Pessoa A',bips=8,shipments
 
 
 class DomainTests(unittest.TestCase):
+    def test_new_source_with_code_and_without_before_station(self):
+        header=['year_resolved','month_resolved','week_resolved','cutoff','hora_resolucao','soc_name',
+            'soc_code','exception_reason','operator','fluxo','resolved_shipment','resolved_bips','sub_area']
+        line=[2026,11,47,'2026-11-17',10,'SoC_SP_Santana','SOC-SP2','Etiqueta','Pessoa A','FWD',22,22,'Reimpressão']
+        record=next(iter(normalize([header,line]).values()))[0]
+        self.assertEqual(record['soc_code'],'SOC-SP2')
+        self.assertEqual(record['before_station_type'],'')
+        self.assertEqual(record['bips'],22)
+        original=dict(record)
+        record['soc_code']='SOC-SP2-RENOMEADO'
+        self.assertEqual(fingerprint([original]),fingerprint([record]))
+
+    def test_week_month_and_leap_year_boundaries(self):
+        self.assertEqual(period_range('2026-11-17','week'),dict(kind='week',start='2026-11-16',end='2026-11-22',days=7))
+        self.assertEqual(period_range('2026-11-17','month')['end'],'2026-11-30')
+        self.assertEqual(period_range('2028-02-15','month')['end'],'2028-02-29')
+        self.assertEqual(period_range('2027-01-01','week')['start'],'2026-12-28')
+        with self.assertRaises(ValueError):
+            period_range('2026-11-17','year')
+
+    def test_daily_summary_distinguishes_zero_from_unobserved(self):
+        rows=[dict(day='2026-11-16',soc_name='A',hour=6,bips=0),
+              dict(day='2026-11-17',soc_name='A',hour=7,bips=10)]
+        result=daily_summary(rows,'2026-11-16','2026-11-18')
+        self.assertTrue(result[0]['observed'])
+        self.assertEqual(result[0]['bips'],0)
+        self.assertEqual(result[1]['bips'],10)
+        self.assertFalse(result[2]['observed'])
     def test_count_bips_and_preserve_cutoff(self):
         buckets=normalize([HEAD,row(hour=2),row(hour=2,bips=2)])
         records=buckets[('2026-11-16',2,'SOC A')]
